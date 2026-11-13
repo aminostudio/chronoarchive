@@ -54,6 +54,13 @@ function add_action() {}
 function add_filter() {}
 function add_shortcode() {}
 function plugin_basename( $path ) { return basename( $path ); }
+function shortcode_atts( $pairs, $atts, $shortcode = '' ) {
+    $out = array();
+    foreach ( $pairs as $key => $default ) {
+        $out[ $key ] = isset( $atts[ $key ] ) ? $atts[ $key ] : $default;
+    }
+    return apply_filters( 'shortcode_atts_' . $shortcode, $out );
+}
 function __($s) { return $s; }
 function esc_html($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
 function apply_filters( $name, $value ) {
@@ -143,6 +150,44 @@ $bad_decade = new CA_Fake_Query( array( 'decade' => '2025' ), true );
 $WP_Plugin_ChronoArchive->ChronoArchive_decade_filter( $bad_decade );
 ca_assert( 'Invalid decade fails closed', isset( $bad_decade->values['post__in'] ) &&
     array( 0 ) === $bad_decade->values['post__in'] );
+
+// WordPress shortcode_atts_archives filters are a separate trust boundary.
+// These values must not trigger PHP warnings or accidental executable markup.
+$GLOBALS['ca_mock_filters']['shortcode_atts_archives'] = array(
+    'type' => array( 'yearly' ),
+    'limit' => array( '2' ),
+    'format' => array( 'custom' ),
+    'before' => array( '<img src=x onerror=alert(1)>' ),
+    'after' => new stdClass(),
+    'show_post_count' => array( '1' ),
+    'showcount' => array( 'yes' ),
+    'tag' => array( 'script' ),
+    'order' => array( 'ASC' ),
+    'alpha_order' => array( 'DESC' ),
+    'post_order' => array( 'ASC' ),
+    'select_text' => array( '<img src=x onerror=alert(1)>' ),
+    'post_type' => array( 'post' ),
+    'use_cpt_archive' => array( 'yes' ),
+);
+$warning_count = 0;
+set_error_handler( function ( $severity, $message ) use ( &$warning_count ) {
+    ++$warning_count;
+    throw new ErrorException( $message, 0, $severity );
+} );
+$shortcode_error = null;
+$shortcode_result = '';
+try {
+    $shortcode_result = $WP_Plugin_ChronoArchive->shortcode( array( 'type' => 'yearly' ) );
+} catch ( Throwable $error ) {
+    $shortcode_error = $error->getMessage();
+}
+restore_error_handler();
+ca_assert( 'Filtered malformed shortcode attributes do not throw', null === $shortcode_error );
+ca_assert( 'Filtered malformed shortcode attributes do not emit warnings', 0 === $warning_count );
+ca_assert( 'Filtered tag falls back to ul', 0 === strpos( trim( $shortcode_result ), '<ul>' ) );
+ca_assert( 'Filtered HTML cannot inject image or script tags', false === stripos( $shortcode_result, '<img' ) && false === stripos( $shortcode_result, '<script' ) );
+ca_assert( 'Filtered shortcode preserves yearly archive fallback', false !== strpos( $shortcode_result, '2026' ) );
+unset( $GLOBALS['ca_mock_filters']['shortcode_atts_archives'] );
 
 echo "\nMock security checks: {$passes} passed, {$fails} failed.\n";
 exit( $fails ? 1 : 0 );
