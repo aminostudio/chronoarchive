@@ -82,6 +82,9 @@ jobs:
         run: |
           set -euo pipefail
           wpcli=(php /tmp/wp-cli.phar --path=/tmp/chrono-wp)
+          # --skip-content omits all themes. Without a frontend theme WordPress
+          # returns HTTP 200 with an empty body even when WP_Query is valid.
+          "${wpcli[@]}" theme install twentytwentyfour --activate
           "${wpcli[@]}" option update home 'http://127.0.0.1:8093'
           "${wpcli[@]}" option update siteurl 'http://127.0.0.1:8093'
           "${wpcli[@]}" option update start_of_week 1
