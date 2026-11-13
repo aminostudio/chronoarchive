@@ -1,4 +1,11 @@
 <?php
+/**
+ * Direct access is not permitted: only WordPress may bootstrap this plugin.
+ */
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 /*
 Plugin Name: ChronoArchive
 Plugin URI: https://aminostudio.fr/ChronoArchive
@@ -107,7 +114,7 @@ class WP_Plugin_ChronoArchive {
 	 */
 	function ChronoArchive_decade_filter( $query ) {
 		// Never alter admin queries or secondary loops.
-		if ( is_admin() || ! $query->is_main_query() ) {
+		if ( is_admin() || ! $query->is_main_query() || ! $query->is_archive() ) {
 			return;
 		}
 
@@ -139,7 +146,12 @@ class WP_Plugin_ChronoArchive {
 		if ( $query->is_archive() ) {
 			$decade = $query->get( 'decade' );
 			$decade = is_scalar( $decade ) ? (string) $decade : '';
-			if ( preg_match( '/^[1-9][0-9]{3}$/', $decade ) && 0 === ( (int) $decade % 10 ) ) {
+			// Invalid custom archive query variables must not broaden results.
+			if ( '' !== $decade && ( ! preg_match( '/^[1-9][0-9]{3}$/D', $decade ) || 0 !== ( (int) $decade % 10 ) ) ) {
+				$query->set( 'post__in', array( 0 ) );
+				return;
+			}
+			if ( '' !== $decade ) {
 				$start = $decade . '-01-01';
 				$end   = ( $decade + 9 ) . '-12-31';
 				$query->set( 'year', '' );
@@ -269,6 +281,36 @@ class WP_Plugin_ChronoArchive {
 
 		$r = wp_parse_args( $args, $defaults );
 
+		/*
+		 * Defense in depth: public callers and classic-widget filters can bypass
+		 * shortcode_atts(). Sanitize again at the database/output boundary.
+		 */
+		$r['type'] = is_scalar( $r['type'] ) ? sanitize_key( (string) $r['type'] ) : 'yearly';
+		if ( ! in_array( $r['type'], array( 'daily', 'weekly', 'monthly', 'yearly', 'decade', 'alpha', 'postbypost' ), true ) ) {
+			$r['type'] = 'yearly';
+		}
+		$r['format'] = is_scalar( $r['format'] ) ? sanitize_key( (string) $r['format'] ) : 'html';
+		if ( ! in_array( $r['format'], array( 'html', 'option', 'link', 'custom' ), true ) ) {
+			$r['format'] = 'html';
+		}
+		$r['post_type'] = is_scalar( $r['post_type'] ) ? sanitize_key( (string) $r['post_type'] ) : '';
+		$r['before'] = is_scalar( $r['before'] ) ? wp_kses_post( (string) $r['before'] ) : '';
+		$r['after'] = is_scalar( $r['after'] ) ? wp_kses_post( (string) $r['after'] ) : '';
+		if ( 'option' === $r['format'] ) {
+			// No markup can be inserted into a select/option context.
+			$r['before'] = esc_html( wp_strip_all_tags( $r['before'] ) );
+			$r['after'] = esc_html( wp_strip_all_tags( $r['after'] ) );
+		}
+		$r['order'] = is_scalar( $r['order'] ) && 'ASC' === strtoupper( (string) $r['order'] ) ? 'ASC' : 'DESC';
+		$r['alpha_order'] = is_scalar( $r['alpha_order'] ) && 'ASC' === strtoupper( (string) $r['alpha_order'] ) ? 'ASC' : 'DESC';
+		$r['post_order'] = is_scalar( $r['post_order'] ) && 'DESC' === strtoupper( (string) $r['post_order'] ) ? 'DESC' : 'ASC';
+		$r['limit'] = is_scalar( $r['limit'] ) && is_numeric( $r['limit'] ) ? absint( $r['limit'] ) : '';
+		if ( empty( $r['show_post_count'] ) && ! empty( $r['showcount'] ) ) {
+			$r['show_post_count'] = $r['showcount'];
+		}
+		$r['show_post_count'] = is_scalar( $r['show_post_count'] )
+			&& in_array( strtolower( (string) $r['show_post_count'] ), array( '1', 'true', 'yes', 'on' ), true );
+
 		$post_type_object = get_post_type_object( $r['post_type'] );
 		if ( ! is_post_type_viewable( $post_type_object ) ) {
 			return;
@@ -287,10 +329,6 @@ class WP_Plugin_ChronoArchive {
 		$order = strtoupper( $r['order'] );
 		if ( $order !== 'ASC' ) {
 			$order = 'DESC';
-		}
-
-		if ( empty( $r['show_post_count'] ) && ! empty( $r['showcount'] ) ) {
-			$r['show_post_count'] = $r['showcount'];
 		}
 
 		// Separator for weekly archives.
@@ -340,7 +378,7 @@ class WP_Plugin_ChronoArchive {
 					if ( $r['show_post_count'] ) {
 						$r['after'] = '&nbsp;(' . $result->posts . ')' . $after;
 					}
-					$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
+					$output .= get_archives_link( $url, esc_html( $text ), $r['format'], $r['before'], $r['after'] );
 				}
 			}
 		// Yearly archives.
@@ -374,7 +412,7 @@ class WP_Plugin_ChronoArchive {
 					if ( $r['show_post_count'] ) {
 						$r['after'] = '&nbsp;(' . $result->posts . ')' . $after;
 					}
-					$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
+					$output .= get_archives_link( $url, esc_html( $text ), $r['format'], $r['before'], $r['after'] );
 				}
 			}
 		// Daily archives.
@@ -400,7 +438,7 @@ class WP_Plugin_ChronoArchive {
 					if ( $r['show_post_count'] ) {
 						$r['after'] = '&nbsp;(' . $result->posts . ')' . $after;
 					}
-					$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
+					$output .= get_archives_link( $url, esc_html( $text ), $r['format'], $r['before'], $r['after'] );
 				}
 			}
 		// Weekly archives.
@@ -431,7 +469,7 @@ class WP_Plugin_ChronoArchive {
 					$url  = add_query_arg( $args, get_year_link( (int) substr( $result->week_start, 0, 4 ) ) );
 					$text = $start_label . $archive_week_separator . $end_label;
 					$r['after'] = $r['show_post_count'] ? '&nbsp;(' . (int) $result->posts . ')' . $after : $after;
-					$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
+					$output .= get_archives_link( $url, esc_html( $text ), $r['format'], $r['before'], $r['after'] );
 				}
 			}
 		// Decade archives.
@@ -456,7 +494,7 @@ class WP_Plugin_ChronoArchive {
 					if ( $r['show_post_count'] ) {
 						$r['after'] = '&nbsp;(' . $result->posts . ')' . $after;
 					}
-					$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
+					$output .= get_archives_link( $url, esc_html( $text ), $r['format'], $r['before'], $r['after'] );
 				}
 			}
 		// Post-by-post or Alpha archives.
@@ -481,8 +519,9 @@ class WP_Plugin_ChronoArchive {
 				foreach ( (array) $results as $result ) {
 					if ( $result->post_date != '0000-00-00 00:00:00' ) {
 						$url = get_permalink( (int) $result->ID );
-						$text = $result->post_title ? strip_tags( apply_filters( 'the_title', $result->post_title, $result->ID ) ) : $result->ID;
-						$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
+						$filtered_title = apply_filters( 'the_title', $result->post_title, $result->ID );
+						$text = is_scalar( $filtered_title ) ? wp_strip_all_tags( (string) $filtered_title ) : (string) (int) $result->ID;
+						$output .= get_archives_link( $url, esc_html( $text ), $r['format'], $r['before'], $r['after'] );
 					}
 				}
 			}
@@ -520,15 +559,15 @@ class WP_Plugin_ChronoArchive {
 			'post_type'       => 'post',
 			'use_cpt_archive' => $this->options['use_cpt_archive']
 		);
-		$atts = shortcode_atts( $defaults, $atts, 'archives' );
+		$atts = shortcode_atts( $defaults, is_array( $atts ) ? $atts : array(), 'archives' );
 
 		$type            = sanitize_key( $atts['type'] );
 		$type            = in_array( $type, array( 'daily', 'weekly', 'monthly', 'yearly', 'decade', 'alpha', 'postbypost' ), true ) ? $type : 'yearly';
 		$limit           = ! empty( $atts['limit'] ) ? absint( $atts['limit'] ) : '';
 		$format          = sanitize_key( $atts['format'] );
 		$format          = in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
-		$before          = wp_kses_post( $atts['before'] );
-		$after           = wp_kses_post( $atts['after'] );
+		$before          = is_scalar( $atts['before'] ) ? wp_kses_post( (string) $atts['before'] ) : '';
+		$after           = is_scalar( $atts['after'] ) ? wp_kses_post( (string) $atts['after'] ) : '';
 		$show_post_count = in_array( strtolower( (string) $atts['show_post_count'] ), array( '1', 'true', 'yes', 'on' ), true )
 			|| in_array( strtolower( (string) $atts['showcount'] ), array( '1', 'true', 'yes', 'on' ), true ) ? 1 : 0;
 		$tag             = sanitize_key( $atts['tag'] );
@@ -536,7 +575,7 @@ class WP_Plugin_ChronoArchive {
 		$order           = ( strtoupper( $atts['order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
 		$alpha_order     = ( strtoupper( $atts['alpha_order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
 		$post_order      = ( strtoupper( $atts['post_order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
-		$select_text     = sanitize_text_field( $atts['select_text'] );
+		$select_text     = is_scalar( $atts['select_text'] ) ? sanitize_text_field( (string) $atts['select_text'] ) : '';
 		$post_type       = sanitize_key( $atts['post_type'] );
 		$use_cpt_archive = sanitize_text_field( $atts['use_cpt_archive'] );
 
@@ -756,7 +795,14 @@ class ChronoArchive_Widget extends WP_Widget {
 	 * @param array $instance Instance settings.
 	 */
 	function widget( $args, $instance ) {
-		extract( $args );
+		// These wrappers are supplied by WordPress/the trusted theme, not by
+		// untrusted shortcode or widget settings. Avoid extract() shadowing locals.
+		$args = is_array( $args ) ? $args : array();
+		$before_widget = isset( $args['before_widget'] ) && is_string( $args['before_widget'] ) ? $args['before_widget'] : '';
+		$after_widget  = isset( $args['after_widget'] ) && is_string( $args['after_widget'] ) ? $args['after_widget'] : '';
+		$before_title  = isset( $args['before_title'] ) && is_string( $args['before_title'] ) ? $args['before_title'] : '';
+		$after_title   = isset( $args['after_title'] ) && is_string( $args['after_title'] ) ? $args['after_title'] : '';
+		$instance = is_array( $instance ) ? $instance : array();
 
 		$format         = empty( $instance['format'] ) ? 'html' : apply_filters( 'widget_format', $instance['format'] );
 		$type           = empty( $instance['type'] ) ? 'yearly' : apply_filters( 'widget_type', $instance['type'] );
@@ -1010,5 +1056,4 @@ function ChronoArchive_register_widget() {
 	register_widget( 'ChronoArchive_Widget' );
 }
 add_action( 'widgets_init', 'ChronoArchive_register_widget' );
-?>
 
