@@ -10,6 +10,10 @@ Based on: Annual Archive by Twinpictures (https://www.twinpictures.de/)
 License: GPL2
 */
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Class WP_Plugin_ChronoArchive
  *
@@ -66,7 +70,7 @@ class WP_Plugin_ChronoArchive {
 		add_action( 'plugin_action_links_' . plugin_basename(__FILE__), array( $this, 'plugin_actions' ) );
 		add_action( 'admin_init', array( $this, 'admin_init' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'archive_admin_js_scripts' ) );
-		add_action( 'wp_head', array( $this, 'plugin_head_inject' ) );
+		add_action( 'wp_enqueue_scripts', array( $this, 'plugin_enqueue_styles' ) );
 		add_action( 'plugins_loaded', array( $this, 'ChronoArchive_load_textdomain' ) );
 
 		// Register shortcodes.
@@ -182,14 +186,39 @@ class WP_Plugin_ChronoArchive {
 	}
 
 	/**
-	 * Inject custom CSS into the head.
+	 * Prepare administrator CSS for an HTML-safe style element.
 	 *
-	 * The CSS is escaped to prevent code injection.
+	 * This is a CSS text boundary, not a full CSS validator. Administrators
+	 * retain CSS capabilities but a legacy option cannot close the style tag.
+	 *
+	 * @param mixed $raw CSS from stored settings.
+	 * @return string
 	 */
-	function plugin_head_inject(){
-		if ( ! empty( $this->options['custom_css'] ) ) {
-			echo "\n<style>\n" . esc_html( $this->options['custom_css'] ) . "\n</style>\n";
+	public static function safe_custom_css( $raw ) {
+		if ( ! is_string( $raw ) ) {
+			return '';
 		}
+		$raw = substr( $raw, 0, 20000 );
+		$raw = wp_strip_all_tags( $raw );
+		// Prevent the HTML parser from recognizing a closing style tag,
+		// including values loaded from unsanitized legacy options.
+		return str_replace( '<', '\\3c ', $raw );
+	}
+
+	/**
+	 * Enqueue custom styling using the WordPress Styles API.
+	 *
+	 * The handle has no external file and is enqueued only with real CSS.
+	 * No raw style elements are echoed by this plugin.
+	 */
+	function plugin_enqueue_styles() {
+		$css = self::safe_custom_css( $this->options['custom_css'] );
+		if ( '' === trim( $css ) ) {
+			return;
+		}
+		wp_register_style( 'chronoarchive-custom', false, array(), $this->version );
+		wp_enqueue_style( 'chronoarchive-custom' );
+		wp_add_inline_style( 'chronoarchive-custom', $css );
 	}
 
 	/**
@@ -634,6 +663,9 @@ class WP_Plugin_ChronoArchive {
 	 * Options page callback.
 	 */
 	function options_page() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
 		$like_it_arr = array(
 			__( 'really tied the room together', 'ChronoArchive' ),
 			__( 'made you feel all warm and fuzzy on the inside', 'ChronoArchive' ),
@@ -736,15 +768,21 @@ class WP_Plugin_ChronoArchive {
 	 */
 	function _set_options() {
 		$saved_options = get_option( $this->options_name );
-		// Backwards compatibility: check for old options.
-		if ( empty( $saved_options ) ) {
+		// Preserve settings from historic installations without trusting types.
+		if ( ! is_array( $saved_options ) || empty( $saved_options ) ) {
 			$saved_options = get_option( $this->domain . 'options' );
 		}
-		if ( ! empty( $saved_options ) ) {
-			foreach ( $this->options as $key => $option ) {
-				$this->options[ $key ] = empty( $saved_options[ $key ] ) ? '' : $saved_options[ $key ];
-			}
+		if ( ! is_array( $saved_options ) ) {
+			return;
 		}
+		$this->options['custom_css'] = isset( $saved_options['custom_css'] ) &&
+			is_string( $saved_options['custom_css'] )
+			? substr( $saved_options['custom_css'], 0, 20000 )
+			: '';
+		$this->options['use_cpt_archive'] = ! empty( $saved_options['use_cpt_archive'] ) &&
+			is_scalar( $saved_options['use_cpt_archive'] )
+			? '1'
+			: '';
 	}
 
 } // end class WP_Plugin_ChronoArchive
