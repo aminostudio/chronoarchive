@@ -598,7 +598,8 @@ class WP_Plugin_ChronoArchive {
 		$post_order      = 'ASC' === strtoupper( $atts['post_order'] ) ? 'ASC' : 'DESC';
 		$select_text     = sanitize_text_field( $atts['select_text'] );
 		$post_type       = sanitize_key( $atts['post_type'] );
-		$use_cpt_archive = '1' === $atts['use_cpt_archive'] ? '1' : '';
+		// Preserve legacy truthy values accepted by the original shortcode.
+		$use_cpt_archive = '' !== $atts['use_cpt_archive'] && '0' !== $atts['use_cpt_archive'] ? '1' : '';
 
 		if ( $format == 'option' ) {
 			$dtitle = ! empty( $select_text )
