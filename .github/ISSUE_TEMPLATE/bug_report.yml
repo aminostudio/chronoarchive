@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a non-security ChronoArchive defect
+title: "Bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not disclose vulnerabilities in public issues. Please follow SECURITY.md."
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: WordPress, PHP and ChronoArchive versions
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include shortcode, post type, permalink structure and URL when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or screenshots
+      description: Exclude credentials, tokens and personal data.
