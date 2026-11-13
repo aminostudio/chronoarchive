@@ -85,7 +85,9 @@ jobs:
           "${wpcli[@]}" option update home 'http://127.0.0.1:8093'
           "${wpcli[@]}" option update siteurl 'http://127.0.0.1:8093'
           "${wpcli[@]}" option update start_of_week 1
-          "${wpcli[@]}" rewrite structure '/%year%/%monthnum%/%day%/%postname%/'
+          # The PHP built-in server has no Apache/Nginx rewrite rules.
+          # Test actual archive URLs in WordPress's plain-permalink mode;
+          # pretty permalink HTTP routes require a separate web-server matrix.
           "${wpcli[@]}" post create --post_title='CA HTTP Boundary Dec' \
             --post_date='2019-12-31 12:00:00' --post_status=publish --porcelain >/dev/null
           "${wpcli[@]}" post create --post_title='CA HTTP Boundary Jan' \
