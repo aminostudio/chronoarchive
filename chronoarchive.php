@@ -814,9 +814,9 @@ class ChronoArchive_Widget extends WP_Widget {
 			$show_post_count = $instance['showcount'];
 		}
 
-		echo $before_widget;
+		echo wp_kses_post( $before_widget );
 		if ( is_scalar( $title ) && '' !== (string) $title ) {
-			echo $before_title . esc_html( (string) $title ) . $after_title;
+			echo wp_kses_post( $before_title ) . esc_html( (string) $title ) . wp_kses_post( $after_title );
 		}
 
 		if ( $format == 'option' ) {
@@ -859,7 +859,7 @@ class ChronoArchive_Widget extends WP_Widget {
 			<?php
 		}
 
-		echo $after_widget;
+		echo wp_kses_post( $after_widget );
 	}
 
 	/**
@@ -916,18 +916,18 @@ class ChronoArchive_Widget extends WP_Widget {
 		?>
 		<p>
 			<label for="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>">
-				<?php _e( 'Title:', 'ChronoArchive' ); ?>
+				<?php esc_html_e( 'Title:', 'ChronoArchive' ); ?>
 				<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'title' ) ); ?>" type="text" value="<?php echo esc_attr( $title ); ?>" />
 			</label>
 		</p>
 		<p>
 			<label for="<?php echo esc_attr( $this->get_field_id( 'show_post_count' ) ); ?>">
 				<input type="checkbox" id="<?php echo esc_attr( $this->get_field_id( 'show_post_count' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'show_post_count' ) ); ?>" value="1" <?php checked( $show_post_count, 1 ); ?> />
-				&nbsp;&nbsp;<?php _e( 'Show post counts', 'ChronoArchive' ); ?>
+				&nbsp;&nbsp;<?php esc_html_e( 'Show post counts', 'ChronoArchive' ); ?>
 			</label>
 		</p>
 		<p>
-			<label><?php _e( 'Archive type:', 'ChronoArchive' ); ?>
+			<label><?php esc_html_e( 'Archive type:', 'ChronoArchive' ); ?>
 				<select name="<?php echo esc_attr( $this->get_field_name( 'type' ) ); ?>" id="<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" class="annual_archive_type_select">
 					<?php
 						$types_arr = array(
@@ -945,31 +945,31 @@ class ChronoArchive_Widget extends WP_Widget {
 						$post_style  = 'style="display: none;"';
 
 						foreach ( $types_arr as $key => $value ) {
-							$selected = ( $key == $type || ( ! $type && $key == 'yearly' ) ) ? 'SELECTED' : '';
+							// WordPress core selected() will print the safe selected attribute.
 							// Set data attribute for ordering fields.
-							$data_att = 'data-orderfield="wrap_' . $this->get_field_id('order') . '"';
+							$data_att = 'wrap_' . $this->get_field_id( 'order' );
 							if ( $key == 'alpha' ) {
-								$data_att = 'data-orderfield="wrap_' . $this->get_field_id('alpha_order') . '"';
+								$data_att = 'wrap_' . $this->get_field_id( 'alpha_order' );
 								if ( $key == $type ) {
 									$order_style = 'style="display: none;"';
 									$alpha_style = '';
 								}
 							}
 							if ( $key == 'postbypost' ) {
-								$data_att = 'data-orderfield="wrap_' . $this->get_field_id('post_order') . '"';
+								$data_att = 'wrap_' . $this->get_field_id( 'post_order' );
 								if ( $key == $type ) {
 									$order_style = 'style="display: none;"';
 									$post_style  = '';
 								}
 							}
-							echo '<option value="' . $key . '" ' . $data_att . ' ' . $selected . '>' . $value . '</option>';
+							echo '<option value="' . esc_attr( $key ) . '" data-orderfield="' . esc_attr( $data_att ) . '"' . selected( $key, $type ? $type : 'yearly', false ) . '>' . esc_html( $value ) . '</option>';
 						}
 					?>
 				</select>
 			</label>
 		</p>
 		<p>
-			<label><?php _e( 'Format:', 'ChronoArchive' ); ?>
+			<label><?php esc_html_e( 'Format:', 'ChronoArchive' ); ?>
 				<select name="<?php echo esc_attr( $this->get_field_name( 'format' ) ); ?>" id="<?php echo esc_attr( $this->get_field_id( 'format' ) ); ?>">
 					<?php
 						$format_arr = array(
@@ -979,63 +979,63 @@ class ChronoArchive_Widget extends WP_Widget {
 							'custom' => __( 'Custom', 'ChronoArchive' )
 						);
 						foreach ( $format_arr as $key => $value ) {
-							$selected = ( $key == $format || ( ! $format && $key == 'html' ) ) ? 'SELECTED' : '';
-							echo '<option value="' . $key . '" ' . $selected . '>' . $value . '</option>';
+							// WordPress core selected() handles safe selected attribute.
+							echo '<option value="' . esc_attr( $key ) . '"' . selected( $key, $format ? $format : 'html', false ) . '>' . esc_html( $value ) . '</option>';
 						}
 					?>
 				</select>
 			</label>
 			<br/>
 			<span class="description">
-				<a href="https://developer.wordpress.org/reference/functions/wp_get_archives/#parameters" target="_blank"><?php _e( 'Format details', 'ChronoArchive' ); ?></a>
+				<a href="https://developer.wordpress.org/reference/functions/wp_get_archives/#parameters" target="_blank"><?php esc_html_e( 'Format details', 'ChronoArchive' ); ?></a>
 			</span>
 		</p>
 		<p>
-			<label><?php _e( 'Post Type:', 'ChronoArchive' ); ?>
+			<label><?php esc_html_e( 'Post Type:', 'ChronoArchive' ); ?>
 				<select name="<?php echo esc_attr( $this->get_field_name( 'post_type' ) ); ?>" id="<?php echo esc_attr( $this->get_field_id( 'post_type' ) ); ?>">
 					<?php
 						$pt_args = array( 'public' => true );
 						$post_types = get_post_types( $pt_args );
 						foreach ( $post_types as $type ) {
-							$selected = ( $type == $post_type ) ? 'SELECTED' : '';
-							echo '<option value="' . $type . '" ' . $selected . '>' . $type . '</option>';
+							// Keep the post type name as data until late escaping.
+							echo '<option value="' . esc_attr( $type ) . '"' . selected( $type, $post_type, false ) . '>' . esc_html( $type ) . '</option>';
 						}
 					?>
 				</select>
 			</label>
 			<br/>
 			<span class="description">
-				<a href="https://developer.wordpress.org/reference/functions/wp_get_archives/#parameters" target="_blank"><?php _e( 'Post Type', 'ChronoArchive' ); ?></a>
+				<a href="https://developer.wordpress.org/reference/functions/wp_get_archives/#parameters" target="_blank"><?php esc_html_e( 'Post Type', 'ChronoArchive' ); ?></a>
 			</span>
 		</p>
 		<p>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'before' ) ); ?>"><?php _e( 'Text Before Link:', 'ChronoArchive' ); ?></label>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'before' ) ); ?>"><?php esc_html_e( 'Text Before Link:', 'ChronoArchive' ); ?></label>
 			<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'before' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'before' ) ); ?>" type="text" value="<?php echo esc_attr( $before ); ?>" />
 		</p>
 		<p>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'after' ) ); ?>"><?php _e( 'Text After Link:', 'ChronoArchive' ); ?></label>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'after' ) ); ?>"><?php esc_html_e( 'Text After Link:', 'ChronoArchive' ); ?></label>
 			<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'after' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'after' ) ); ?>" type="text" value="<?php echo esc_attr( $after ); ?>" />
 		</p>
 		<p>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'select_text' ) ); ?>"><?php _e( 'Select Text:', 'ChronoArchive' ); ?></label>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'select_text' ) ); ?>"><?php esc_html_e( 'Select Text:', 'ChronoArchive' ); ?></label>
 			<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'select_text' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'select_text' ) ); ?>" type="text" value="<?php echo esc_attr( $select_text ); ?>" />
 		</p>
 		<p>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'limit' ) ); ?>"><?php _e( 'Number of archives to display:', 'ChronoArchive' ); ?></label>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'limit' ) ); ?>"><?php esc_html_e( 'Number of archives to display:', 'ChronoArchive' ); ?></label>
 			<input class="widefat" style="width: 50px;" id="<?php echo esc_attr( $this->get_field_id( 'limit' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'limit' ) ); ?>" type="text" value="<?php echo esc_attr( $limit ); ?>" />
 		</p>
-		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php echo $order_style; ?>>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'order' ) ); ?>"><?php _e( 'Sort order:', 'ChronoArchive' ); ?></label>
+		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php if ( '' !== $order_style ) : ?>style="display: none;"<?php endif; ?>>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'order' ) ); ?>"><?php esc_html_e( 'Sort order:', 'ChronoArchive' ); ?></label>
 			<input id="<?php echo esc_attr( $this->get_field_id( 'order' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'order' ) ); ?>" type="radio" value="DESC" <?php checked( $order, 'DESC' ); ?> /> DESC
 			<input name="<?php echo esc_attr( $this->get_field_name( 'order' ) ); ?>" type="radio" value="ASC" <?php checked( $order, 'ASC' ); ?> /> ASC
 		</p>
-		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'alpha_order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php echo $alpha_style; ?>>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'alpha_order' ) ); ?>"><?php _e( 'Alpha order:', 'ChronoArchive' ); ?></label>
+		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'alpha_order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php if ( '' !== $alpha_style ) : ?>style="display: none;"<?php endif; ?>>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'alpha_order' ) ); ?>"><?php esc_html_e( 'Alpha order:', 'ChronoArchive' ); ?></label>
 			<input id="<?php echo esc_attr( $this->get_field_id( 'alpha_order' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'alpha_order' ) ); ?>" type="radio" value="DESC" <?php checked( $alpha_order, 'DESC' ); ?> /> DESC
 			<input name="<?php echo esc_attr( $this->get_field_name( 'alpha_order' ) ); ?>" type="radio" value="ASC" <?php checked( $alpha_order, 'ASC' ); ?> /> ASC
 		</p>
-		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'post_order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php echo $post_style; ?>>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'post_order' ) ); ?>"><?php _e( 'Post order:', 'ChronoArchive' ); ?></label>
+		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'post_order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php if ( '' !== $post_style ) : ?>style="display: none;"<?php endif; ?>>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'post_order' ) ); ?>"><?php esc_html_e( 'Post order:', 'ChronoArchive' ); ?></label>
 			<input id="<?php echo esc_attr( $this->get_field_id( 'post_order' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'post_order' ) ); ?>" type="radio" value="DESC" <?php checked( $post_order, 'DESC' ); ?> /> DESC
 			<input name="<?php echo esc_attr( $this->get_field_name( 'post_order' ) ); ?>" type="radio" value="ASC" <?php checked( $post_order, 'ASC' ); ?> /> ASC
 		</p>
