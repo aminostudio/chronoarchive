@@ -17,3 +17,13 @@ The baseline is **not a public stable release**.
 - Improved post type and historical count argument handling.
 
 ChronoArchive is a fork of Annual Archive. Historical upstream changelog and attribution appear in `readme.txt` and `NOTICE.md`.
+
+## Unreleased (security review branch only)
+
+- Validate public archive renderer arguments independently of shortcode sanitization.
+- Escape archive labels, filtered titles, and legacy widget values.
+- Harden weekly/decade archive query variables against invalid input.
+- Reject malformed widget settings and stored CSS types; retain historical widget count compatibility.
+- Introduce PHP security-contract smoke tests and a PHP version matrix.
+
+**Not shipped to LAB or production. No stable release claim.**
