@@ -189,5 +189,19 @@ ca_assert( 'Filtered HTML cannot inject image or script tags', false === stripos
 ca_assert( 'Filtered shortcode preserves yearly archive fallback', false !== strpos( $shortcode_result, '2026' ) );
 unset( $GLOBALS['ca_mock_filters']['shortcode_atts_archives'] );
 
+// A third-party filter may even return a non-array collection.
+// The fallback must remain a valid archive rather than a PHP fatal.
+$GLOBALS['ca_mock_filters']['shortcode_atts_archives'] = new stdClass();
+$unexpected_type_error = null;
+try {
+    $fallback_output = $WP_Plugin_ChronoArchive->shortcode( array() );
+} catch ( Throwable $error ) {
+    $unexpected_type_error = $error->getMessage();
+    $fallback_output = '';
+}
+ca_assert( 'Non-array shortcode filter return does not throw', null === $unexpected_type_error );
+ca_assert( 'Non-array shortcode filter return uses safe defaults', false !== strpos( $fallback_output, '2026' ) );
+unset( $GLOBALS['ca_mock_filters']['shortcode_atts_archives'] );
+
 echo "\nMock security checks: {$passes} passed, {$fails} failed.\n";
 exit( $fails ? 1 : 0 );
