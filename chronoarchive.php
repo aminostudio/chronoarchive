@@ -190,10 +190,15 @@ class WP_Plugin_ChronoArchive {
 	 *
 	 * The CSS is escaped to prevent code injection.
 	 */
-	function plugin_head_inject(){
-		if ( ! empty( $this->options['custom_css'] ) ) {
-			echo "\n<style>\n" . esc_html( $this->options['custom_css'] ) . "\n</style>\n";
+	function plugin_head_inject() {
+		// Legacy custom CSS remains admin-controlled. Never let stored non-string
+		// options reach the style element, and escape potential HTML end-tags.
+		$css = isset( $this->options['custom_css'] ) && is_string( $this->options['custom_css'] )
+			? $this->options['custom_css'] : '';
+		if ( '' === trim( $css ) || strlen( $css ) > 16384 ) {
+			return;
 		}
+		echo "\n<style id=\"chronoarchive-custom-css\">\n" . esc_html( $css ) . "\n</style>\n";
 	}
 
 	/**
@@ -822,7 +827,10 @@ class ChronoArchive_Widget extends WP_Widget {
 		$limit          = $filter_scalar( 'widget_limit', $scalar( 'limit' ) );
 		$title          = apply_filters( 'widget_title', $scalar( 'title' ), $instance, $this->id_base );
 		$title          = is_scalar( $title ) ? (string) $title : '';
-		$show_post_count= $scalar( 'show_post_count', $scalar( 'showcount', '0' ) );
+		$show_post_count= $scalar( 'show_post_count', '0' );
+		if ( '' === $show_post_count || '0' === $show_post_count ) {
+			$show_post_count = $scalar( 'showcount', $show_post_count );
+		}
 		$order          = $filter_scalar( 'widget_order', $scalar( 'order', 'DESC' ) );
 		$alpha_order    = $filter_scalar( 'widget_alpha_order', $scalar( 'alpha_order', 'ASC' ) );
 		$post_order     = $filter_scalar( 'widget_post_order', $scalar( 'post_order', 'DESC' ) );
@@ -920,14 +928,14 @@ class ChronoArchive_Widget extends WP_Widget {
 			return isset( $instance[ $field ] ) && is_scalar( $instance[ $field ] )
 				? stripslashes( (string) $instance[ $field ] ) : $fallback;
 		};
-		$title = $get( 'title' );
+		$title = sanitize_text_field( $get( 'title' ) );
 		$show_post_count = $get( 'show_post_count', $get( 'showcount', '0' ) );
-		$format = $get( 'format' );
+		$format = sanitize_key( $get( 'format' ) );
 		$before = $get( 'before' );
 		$after = $get( 'after' );
 		$type = sanitize_key( $get( 'type' ) );
 		$limit = $get( 'limit' );
-		$post_type = $get( 'post_type', 'post' );
+		$post_type = sanitize_key( $get( 'post_type', 'post' ) );
 		$order = $get( 'order', 'DESC' );
 		$alpha_order = $get( 'alpha_order', 'ASC' );
 		$post_order = $get( 'post_order', 'DESC' );
