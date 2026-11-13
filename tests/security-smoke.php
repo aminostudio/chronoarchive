@@ -16,6 +16,20 @@ class WP_Widget {
     public $id_base = 'chronoarchive_widget';
     public function __construct() {}
 }
+class CA_Fake_Query {
+    public $values = array();
+    public $archive = false;
+    public function __construct( $values, $is_archive ) {
+        $this->values = $values;
+        $this->archive = $is_archive;
+    }
+    public function is_main_query() { return true; }
+    public function is_archive() { return $this->archive; }
+    public function get( $key ) {
+        return isset( $this->values[ $key ] ) ? $this->values[ $key ] : null;
+    }
+    public function set( $key, $value ) { $this->values[ $key ] = $value; }
+}
 class CA_Fake_DB {
     public $posts = 'wp_posts';
 
@@ -120,6 +134,15 @@ $widget_html = ob_get_clean();
 ca_assert( 'Widget wrapper remains intact', false !== strpos( $widget_html, '<aside>' ) );
 ca_assert( 'Widget title filter returning array is not fatal', false === strpos( $widget_html, 'Array' ) );
 ca_assert( 'Unexpected widget args do not overwrite state', false !== strpos( $widget_html, '2026' ) );
+
+$home = new CA_Fake_Query( array( 'chrono_week' => '2025-12-29' ), false );
+$WP_Plugin_ChronoArchive->ChronoArchive_decade_filter( $home );
+ca_assert( 'Week query does not change homepage', ! isset( $home->values['date_query'] ) );
+
+$bad_decade = new CA_Fake_Query( array( 'decade' => '2025' ), true );
+$WP_Plugin_ChronoArchive->ChronoArchive_decade_filter( $bad_decade );
+ca_assert( 'Invalid decade fails closed', isset( $bad_decade->values['post__in'] ) &&
+    array( 0 ) === $bad_decade->values['post__in'] );
 
 echo "\nMock security checks: {$passes} passed, {$fails} failed.\n";
 exit( $fails ? 1 : 0 );
