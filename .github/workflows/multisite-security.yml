@@ -7,6 +7,11 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: chrono-multisite-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+
 jobs:
   network-capabilities:
     name: Network permissions · WP ${{ matrix.wp }} / PHP ${{ matrix.php }}
