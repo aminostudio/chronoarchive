@@ -36,6 +36,7 @@ Store a minimal test case, before/after output, regression test and environment 
 ### Historical advisories researched
 
 - [CVE-2023-0178 (NVD)](https://nvd.nist.gov/vuln/detail/CVE-2023-0178): predecessor Annual Archive before 1.6.0, stored XSS via inadequately validated/escaped shortcode attributes; described as contributor role and above.
+- [CVE-2023-49847 (Patchstack)](https://patchstack.com/database/wordpress/plugin/anual-archive/vulnerability/wordpress-annual-archive-plugin-1-6-0-cross-site-scripting-xss-vulnerability): Annual Archive through 1.6.0, stored XSS requiring contributor-level privileges and user interaction. An additional advisory distinct from CVE-2023-0178.
 - [CVE-2024-33598 (Patchstack)](https://patchstack.com/database/wordpress/plugin/anual-archive/vulnerability/wordpress-annual-archive-plugin-1-6-0-cross-site-scripting-xss-vulnerability-2): predecessor Annual Archive through 1.6.0, stored XSS with privileged (administrator) access and user interaction.
 
 These advisories refer to **Annual Archive**, not independently verified vulnerabilities of **ChronoArchive**. The public advisory summaries do not establish an exact exploit chain for this fork. No production exploitation has been attempted.
