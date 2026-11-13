@@ -560,24 +560,27 @@ class WP_Plugin_ChronoArchive {
 			'use_cpt_archive' => $this->options['use_cpt_archive']
 		);
 		$atts = shortcode_atts( $defaults, is_array( $atts ) ? $atts : array(), 'archives' );
+		$scalar = static function ( $key ) use ( $atts ) {
+			return isset( $atts[ $key ] ) && is_scalar( $atts[ $key ] ) ? (string) $atts[ $key ] : '';
+		};
 
-		$type            = sanitize_key( $atts['type'] );
+		$type            = sanitize_key( $scalar( 'type' ) );
 		$type            = in_array( $type, array( 'daily', 'weekly', 'monthly', 'yearly', 'decade', 'alpha', 'postbypost' ), true ) ? $type : 'yearly';
-		$limit           = ! empty( $atts['limit'] ) ? absint( $atts['limit'] ) : '';
-		$format          = sanitize_key( $atts['format'] );
+		$limit           = '' !== $scalar( 'limit' ) ? absint( $scalar( 'limit' ) ) : '';
+		$format          = sanitize_key( $scalar( 'format' ) );
 		$format          = in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
-		$before          = is_scalar( $atts['before'] ) ? wp_kses_post( (string) $atts['before'] ) : '';
-		$after           = is_scalar( $atts['after'] ) ? wp_kses_post( (string) $atts['after'] ) : '';
-		$show_post_count = in_array( strtolower( (string) $atts['show_post_count'] ), array( '1', 'true', 'yes', 'on' ), true )
-			|| in_array( strtolower( (string) $atts['showcount'] ), array( '1', 'true', 'yes', 'on' ), true ) ? 1 : 0;
-		$tag             = sanitize_key( $atts['tag'] );
+		$before          = wp_kses_post( $scalar( 'before' ) );
+		$after           = wp_kses_post( $scalar( 'after' ) );
+		$show_post_count = in_array( strtolower( $scalar( 'show_post_count' ) ), array( '1', 'true', 'yes', 'on' ), true )
+			|| in_array( strtolower( $scalar( 'showcount' ) ), array( '1', 'true', 'yes', 'on' ), true ) ? 1 : 0;
+		$tag             = sanitize_key( $scalar( 'tag' ) );
 		$tag             = in_array( $tag, array( 'ul', 'ol', 'div', 'nav', 'section', 'span' ), true ) ? $tag : 'ul';
-		$order           = ( strtoupper( $atts['order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
-		$alpha_order     = ( strtoupper( $atts['alpha_order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
-		$post_order      = ( strtoupper( $atts['post_order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
-		$select_text     = is_scalar( $atts['select_text'] ) ? sanitize_text_field( (string) $atts['select_text'] ) : '';
-		$post_type       = sanitize_key( $atts['post_type'] );
-		$use_cpt_archive = sanitize_text_field( $atts['use_cpt_archive'] );
+		$order           = 'ASC' === strtoupper( $scalar( 'order' ) ) ? 'ASC' : 'DESC';
+		$alpha_order     = 'ASC' === strtoupper( $scalar( 'alpha_order' ) ) ? 'ASC' : 'DESC';
+		$post_order      = 'ASC' === strtoupper( $scalar( 'post_order' ) ) ? 'ASC' : 'DESC';
+		$select_text     = sanitize_text_field( $scalar( 'select_text' ) );
+		$post_type       = sanitize_key( $scalar( 'post_type' ) );
+		$use_cpt_archive = sanitize_text_field( $scalar( 'use_cpt_archive' ) );
 
 		if ( $format == 'option' ) {
 			$dtitle = ! empty( $select_text )
@@ -803,23 +806,28 @@ class ChronoArchive_Widget extends WP_Widget {
 		$before_title  = isset( $args['before_title'] ) && is_string( $args['before_title'] ) ? $args['before_title'] : '';
 		$after_title   = isset( $args['after_title'] ) && is_string( $args['after_title'] ) ? $args['after_title'] : '';
 		$instance = is_array( $instance ) ? $instance : array();
+		$scalar = static function ( $key, $default = '' ) use ( $instance ) {
+			return isset( $instance[ $key ] ) && is_scalar( $instance[ $key ] )
+				? (string) $instance[ $key ] : $default;
+		};
+		$filter_scalar = static function ( $hook, $value ) {
+			$filtered = apply_filters( $hook, $value );
+			return is_scalar( $filtered ) ? (string) $filtered : '';
+		};
 
-		$format         = empty( $instance['format'] ) ? 'html' : apply_filters( 'widget_format', $instance['format'] );
-		$type           = empty( $instance['type'] ) ? 'yearly' : apply_filters( 'widget_type', $instance['type'] );
-		$before         = wp_kses_post( empty( $instance['before'] ) ? '' : apply_filters( 'widget_before', $instance['before'] ) );
-		$after          = wp_kses_post( empty( $instance['after'] ) ? '' : apply_filters( 'widget_after', $instance['after'] ) );
-		$limit          = apply_filters( 'widget_limit', isset( $instance['limit'] ) ? $instance['limit'] : '' );
-		$title          = apply_filters( 'widget_title', empty( $instance['title'] ) ? '' : $instance['title'], $instance, $this->id_base );
-		$show_post_count= empty( $instance['show_post_count'] ) ? 0 : $instance['show_post_count'];
-		$order          = empty( $instance['order'] ) ? 'DESC' : apply_filters( 'widget_order', $instance['order'] );
-		$alpha_order    = empty( $instance['alpha_order'] ) ? 'ASC' : apply_filters( 'widget_alpha_order', $instance['alpha_order'] );
-		$post_order     = empty( $instance['post_order'] ) ? 'DESC' : apply_filters( 'widget_post_order', $instance['post_order'] );
-		$select_text    = empty( $instance['select_text'] ) ? '' : apply_filters( 'widget_slelect_text', $instance['select_text'] );
-		$post_type      = empty( $instance['post_type'] ) ? 'post' : apply_filters( 'widget_post_type', $instance['post_type'] );
-
-		if ( empty( $show_post_count ) && ! empty( $instance['showcount'] ) ) {
-			$show_post_count = $instance['showcount'];
-		}
+		$format         = $filter_scalar( 'widget_format', $scalar( 'format', 'html' ) );
+		$type           = $filter_scalar( 'widget_type', $scalar( 'type', 'yearly' ) );
+		$before         = wp_kses_post( $filter_scalar( 'widget_before', $scalar( 'before' ) ) );
+		$after          = wp_kses_post( $filter_scalar( 'widget_after', $scalar( 'after' ) ) );
+		$limit          = $filter_scalar( 'widget_limit', $scalar( 'limit' ) );
+		$title          = apply_filters( 'widget_title', $scalar( 'title' ), $instance, $this->id_base );
+		$title          = is_scalar( $title ) ? (string) $title : '';
+		$show_post_count= $scalar( 'show_post_count', $scalar( 'showcount', '0' ) );
+		$order          = $filter_scalar( 'widget_order', $scalar( 'order', 'DESC' ) );
+		$alpha_order    = $filter_scalar( 'widget_alpha_order', $scalar( 'alpha_order', 'ASC' ) );
+		$post_order     = $filter_scalar( 'widget_post_order', $scalar( 'post_order', 'DESC' ) );
+		$select_text    = $filter_scalar( 'widget_slelect_text', $scalar( 'select_text' ) );
+		$post_type      = $filter_scalar( 'widget_post_type', $scalar( 'post_type', 'post' ) );
 
 		echo $before_widget;
 		if ( $title ) {
@@ -879,19 +887,23 @@ class ChronoArchive_Widget extends WP_Widget {
 	function update( $new_instance, $old_instance ) {
 		$instance = is_array( $old_instance ) ? $old_instance : array();
 		$new_instance = is_array( $new_instance ) ? $new_instance : array();
-		$instance['title'] = sanitize_text_field( $new_instance['title'] ?? '' );
-		$instance['before'] = wp_kses_post( $new_instance['before'] ?? '' );
-		$instance['after'] = wp_kses_post( $new_instance['after'] ?? '' );
-		$instance['select_text'] = sanitize_text_field( $new_instance['select_text'] ?? '' );
-		$instance['limit'] = empty( $new_instance['limit'] ) ? '' : absint( $new_instance['limit'] );
-		$instance['show_post_count'] = ! empty( $new_instance['show_post_count'] ) ? 1 : 0;
-		$instance['post_type'] = sanitize_key( $new_instance['post_type'] ?? 'post' );
-		$type = sanitize_key( $new_instance['type'] ?? 'yearly' );
+		$get = static function ( $field, $default = '' ) use ( $new_instance ) {
+			return isset( $new_instance[ $field ] ) && is_scalar( $new_instance[ $field ] )
+				? (string) $new_instance[ $field ] : $default;
+		};
+		$instance['title'] = sanitize_text_field( $get( 'title' ) );
+		$instance['before'] = wp_kses_post( $get( 'before' ) );
+		$instance['after'] = wp_kses_post( $get( 'after' ) );
+		$instance['select_text'] = sanitize_text_field( $get( 'select_text' ) );
+		$instance['limit'] = '' === $get( 'limit' ) ? '' : absint( $get( 'limit' ) );
+		$instance['show_post_count'] = '' === $get( 'show_post_count' ) ? 0 : 1;
+		$instance['post_type'] = sanitize_key( $get( 'post_type', 'post' ) );
+		$type = sanitize_key( $get( 'type', 'yearly' ) );
 		$instance['type'] = in_array( $type, array( 'daily', 'weekly', 'monthly', 'yearly', 'decade', 'alpha', 'postbypost' ), true ) ? $type : 'yearly';
-		$format = sanitize_key( $new_instance['format'] ?? 'html' );
+		$format = sanitize_key( $get( 'format', 'html' ) );
 		$instance['format'] = in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
 		foreach ( array( 'order' => 'DESC', 'alpha_order' => 'ASC', 'post_order' => 'DESC' ) as $field => $default ) {
-			$value = strtoupper( (string) ( $new_instance[ $field ] ?? $default ) );
+			$value = strtoupper( $get( $field, $default ) );
 			$instance[ $field ] = in_array( $value, array( 'ASC', 'DESC' ), true ) ? $value : $default;
 		}
 		return $instance;
@@ -903,22 +915,23 @@ class ChronoArchive_Widget extends WP_Widget {
 	 * @param array $instance Current settings.
 	 */
 	function form( $instance ) {
-		$title = empty( $instance['title'] ) ? '' : stripslashes( $instance['title'] );
-		$show_post_count = empty( $instance['show_post_count'] ) ? 0 : $instance['show_post_count'];
-		$format = empty( $instance['format'] ) ? '' : stripslashes( $instance['format'] );
-		$before = empty( $instance['before'] ) ? '' : stripslashes( $instance['before'] );
-		$after = empty( $instance['after'] ) ? '' : stripslashes( $instance['after'] );
-		$type = empty( $instance['type'] ) ? '' : strip_tags( $instance['type'] );
-		$limit = empty( $instance['limit'] ) ? '' : stripslashes( $instance['limit'] );
-		$post_type = empty( $instance['post_type'] ) ? 'post' : stripslashes( $instance['post_type'] );
-		$order = empty( $instance['order'] ) ? 'DESC' : stripslashes( $instance['order'] );
-		$alpha_order = empty( $instance['alpha_order'] ) ? 'ASC' : stripslashes( $instance['alpha_order'] );
-		$post_order = empty( $instance['post_order'] ) ? 'DESC' : stripslashes( $instance['post_order'] );
-		$select_text = empty( $instance['select_text'] ) ? '' : stripslashes( $instance['select_text'] );
-
-		if ( empty( $show_post_count ) && ! empty( $instance['showcount'] ) ) {
-			$show_post_count = $instance['showcount'];
-		}
+		$instance = is_array( $instance ) ? $instance : array();
+		$get = static function ( $field, $fallback = '' ) use ( $instance ) {
+			return isset( $instance[ $field ] ) && is_scalar( $instance[ $field ] )
+				? stripslashes( (string) $instance[ $field ] ) : $fallback;
+		};
+		$title = $get( 'title' );
+		$show_post_count = $get( 'show_post_count', $get( 'showcount', '0' ) );
+		$format = $get( 'format' );
+		$before = $get( 'before' );
+		$after = $get( 'after' );
+		$type = sanitize_key( $get( 'type' ) );
+		$limit = $get( 'limit' );
+		$post_type = $get( 'post_type', 'post' );
+		$order = $get( 'order', 'DESC' );
+		$alpha_order = $get( 'alpha_order', 'ASC' );
+		$post_order = $get( 'post_order', 'DESC' );
+		$select_text = $get( 'select_text' );
 		?>
 		<p>
 			<label for="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>">
@@ -968,7 +981,7 @@ class ChronoArchive_Widget extends WP_Widget {
 									$post_style  = '';
 								}
 							}
-							echo '<option value="' . $key . '" ' . $data_att . ' ' . $selected . '>' . $value . '</option>';
+							echo '<option value="' . esc_attr( $key ) . '" ' . $data_att . ' ' . $selected . '>' . esc_html( $value ) . '</option>';
 						}
 					?>
 				</select>
