@@ -137,6 +137,31 @@ WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
 ) );
 $rendered_links = ob_get_clean();
 $assert( 'Direct API preserves sanitized LINK format', substr_count( $rendered_links, '<link' ) === 2 );
+// WordPress's get_archives_link filter may provide additional HTML. Its result
+// is untrusted for shortcode display, both when echoed and when returned.
+$malformed_archives_link = static function ( $link ) {
+    return $link . '<script>alert("archive")</script><img src=x onerror=alert(1)>';
+};
+add_filter( 'get_archives_link', $malformed_archives_link, 10, 1 );
+$filtered_markup = do_shortcode( '[chronoarchive type="yearly" limit="1"]' );
+$filtered_options = do_shortcode( '[chronoarchive type="yearly" format="option" limit="1"]' );
+$filtered_links = WP_Plugin_ChronoArchive::wp_get_archives_advanced(
+    array( 'type' => 'yearly', 'format' => 'link', 'limit' => 1, 'echo' => 0 )
+);
+remove_filter( 'get_archives_link', $malformed_archives_link, 10 );
+$assert( 'Returned archive HTML strips filtered executable markup',
+    false === stripos( $filtered_markup, '<script' ) &&
+    false === stripos( $filtered_markup, '<img' ) &&
+    false !== strpos( $filtered_markup, '<a ' ) );
+$assert( 'Returned OPTION archive output preserves strict markup',
+    1 === substr_count( $filtered_options, '<option value=' ) &&
+    false === stripos( $filtered_options, '<img' ) &&
+    false === stripos( $filtered_options, '<script' ) );
+$assert( 'Returned LINK archive output strips filtered HTML tags',
+    1 === substr_count( $filtered_links, '<link' ) &&
+    false === stripos( $filtered_links, '<img' ) &&
+    false === stripos( $filtered_links, '<script' ) );
+
 $assert( 'Unknown post type returns empty entries', false === strpos(
     do_shortcode( '[chronoarchive type="yearly" post_type="missing_ca_type"]' ), '<a ' ) );
 
