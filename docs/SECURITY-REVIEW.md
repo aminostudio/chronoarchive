@@ -64,3 +64,17 @@ These advisories refer to **Annual Archive**, not independently verified vulnera
 - Review the exact predecessor advisory input/sink correspondence if additional technical disclosures become available; don't claim the CVEs are fully neutralized without evidence.
 - Review dynamic SQL filtering by trusted extensions, CSS external resource policy and multisite/large-database behavior.
 - Only then decide whether to close [issue #2](https://github.com/aminostudio/chronoarchive/issues/2).
+
+## Initial official Plugin Check run (GitHub CI)
+
+**Executed:** [WordPress runtime security checks 43370019219](https://github.com/aminostudio/chronoarchive/actions/runs/43370019219), actual WordPress Plugin Check installed in an ephemeral `wp-env` environment.
+
+- WordPress integration: **14/14** checks passed at this checkpoint.
+- Plugin Check ran and printed **169 errors, 14 warnings**. Its command exit code was zero: this does **not** mean zero findings.
+- Dominant categories: `TextDomainMismatch` 74 (#3); `OutputNotEscaped` 40 and `UnsafePrintingFunction` 25 (older admin/widget output); `DirectDB.UnescapedDBParameter` 6 and `PreparedSQL.NotPrepared` 6 for the six archive SQL queries; `DirectDatabaseQuery.DirectQuery` 6. Also translator comments and package-content warnings.
+- The scanner included the entire GitHub working tree, including development scripts, tests, dotfiles and README, which will be excluded from a release package.
+- The admin settings and widget wrappers were **further changed after this run**, so the counts are a baseline only. Re-scan before reporting updated findings.
+
+**SQL review note:** the imported baseline assembles SQL from `$sql_where = $wpdb->prepare( "WHERE post_type = %s AND post_status = 'publish'", $r['post_type'] )`, an allowlisted `$order`, numeric `$limit`, and trusted `$wpdb->posts`. The `getarchives_where` / `getarchives_join` filters originate from WordPress PHP extensions and can alter the query. This reduces the untrusted-input risk but does not prove the final SQL safe. Evaluate each query and test filters; don't suppress Plugin Check findings without evidence.
+
+**Release remains blocked.**
