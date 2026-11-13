@@ -10,6 +10,10 @@ Based on: Annual Archive by Twinpictures (https://www.twinpictures.de/)
 License: GPL2
 */
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Class WP_Plugin_ChronoArchive
  *
@@ -66,7 +70,7 @@ class WP_Plugin_ChronoArchive {
 		add_action( 'plugin_action_links_' . plugin_basename(__FILE__), array( $this, 'plugin_actions' ) );
 		add_action( 'admin_init', array( $this, 'admin_init' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'archive_admin_js_scripts' ) );
-		add_action( 'wp_head', array( $this, 'plugin_head_inject' ) );
+		add_action( 'wp_enqueue_scripts', array( $this, 'plugin_enqueue_styles' ) );
 		add_action( 'plugins_loaded', array( $this, 'ChronoArchive_load_textdomain' ) );
 
 		// Register shortcodes.
@@ -115,6 +119,10 @@ class WP_Plugin_ChronoArchive {
 		// ?m=YYYY&w=NN, this correctly handles weeks crossing a year boundary.
 		$week = $query->get( 'chrono_week' );
 		if ( null !== $week && '' !== $week ) {
+			// A week selector must never rewrite the homepage, search or a single post.
+			if ( ! $query->is_archive() ) {
+				return;
+			}
 			$week = is_string( $week ) ? $week : '';
 			$start = preg_match( '/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/', $week )
 				? DateTimeImmutable::createFromFormat( '!Y-m-d', $week, wp_timezone() ) : false;
@@ -139,7 +147,11 @@ class WP_Plugin_ChronoArchive {
 		if ( $query->is_archive() ) {
 			$decade = $query->get( 'decade' );
 			$decade = is_scalar( $decade ) ? (string) $decade : '';
-			if ( preg_match( '/^[1-9][0-9]{3}$/', $decade ) && 0 === ( (int) $decade % 10 ) ) {
+			if ( '' !== $decade && ( ! preg_match( '/^[1-9][0-9]{3}$/D', $decade ) || 0 !== ( (int) $decade % 10 ) ) ) {
+				$query->set( 'post__in', array( 0 ) );
+				return;
+			}
+			if ( '' !== $decade ) {
 				$start = $decade . '-01-01';
 				$end   = ( $decade + 9 ) . '-12-31';
 				$query->set( 'year', '' );
@@ -174,14 +186,39 @@ class WP_Plugin_ChronoArchive {
 	}
 
 	/**
-	 * Inject custom CSS into the head.
+	 * Prepare administrator CSS for an HTML-safe style element.
 	 *
-	 * The CSS is escaped to prevent code injection.
+	 * This is a CSS text boundary, not a full CSS validator. Administrators
+	 * retain CSS capabilities but a legacy option cannot close the style tag.
+	 *
+	 * @param mixed $raw CSS from stored settings.
+	 * @return string
 	 */
-	function plugin_head_inject(){
-		if ( ! empty( $this->options['custom_css'] ) ) {
-			echo "\n<style>\n" . esc_html( $this->options['custom_css'] ) . "\n</style>\n";
+	public static function safe_custom_css( $raw ) {
+		if ( ! is_string( $raw ) ) {
+			return '';
 		}
+		$raw = substr( $raw, 0, 20000 );
+		$raw = wp_strip_all_tags( $raw );
+		// Prevent the HTML parser from recognizing a closing style tag,
+		// including values loaded from unsanitized legacy options.
+		return str_replace( '<', '\\3c ', $raw );
+	}
+
+	/**
+	 * Enqueue custom styling using the WordPress Styles API.
+	 *
+	 * The handle has no external file and is enqueued only with real CSS.
+	 * No raw style elements are echoed by this plugin.
+	 */
+	function plugin_enqueue_styles() {
+		$css = self::safe_custom_css( $this->options['custom_css'] );
+		if ( '' === trim( $css ) ) {
+			return;
+		}
+		wp_register_style( 'chronoarchive-custom', false, array(), $this->version );
+		wp_enqueue_style( 'chronoarchive-custom' );
+		wp_add_inline_style( 'chronoarchive-custom', $css );
 	}
 
 	/**
@@ -269,9 +306,22 @@ class WP_Plugin_ChronoArchive {
 
 		$r = wp_parse_args( $args, $defaults );
 
+		// Validate direct API and legacy-widget calls, which skip shortcode_atts().
+		$type = is_string( $r['type'] ) ? sanitize_key( $r['type'] ) : '';
+		$r['type'] = in_array( $type, array( 'daily', 'weekly', 'monthly', 'yearly', 'decade', 'alpha', 'postbypost' ), true ) ? $type : 'yearly';
+		$format = is_string( $r['format'] ) ? sanitize_key( $r['format'] ) : '';
+		$r['format'] = in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
+		$r['before'] = wp_kses_post( is_scalar( $r['before'] ) ? (string) $r['before'] : '' );
+		$r['after'] = wp_kses_post( is_scalar( $r['after'] ) ? (string) $r['after'] : '' );
+		$r['order'] = 'ASC' === strtoupper( is_string( $r['order'] ) ? $r['order'] : '' ) ? 'ASC' : 'DESC';
+		$r['alpha_order'] = 'DESC' === strtoupper( is_string( $r['alpha_order'] ) ? $r['alpha_order'] : '' ) ? 'DESC' : 'ASC';
+		$r['post_order'] = 'ASC' === strtoupper( is_string( $r['post_order'] ) ? $r['post_order'] : '' ) ? 'ASC' : 'DESC';
+		$r['limit'] = is_scalar( $r['limit'] ) ? $r['limit'] : '';
+		$r['post_type'] = is_string( $r['post_type'] ) ? sanitize_key( $r['post_type'] ) : '';
+
 		$post_type_object = get_post_type_object( $r['post_type'] );
 		if ( ! is_post_type_viewable( $post_type_object ) ) {
-			return;
+			return '';
 		}
 		$r['post_type'] = $post_type_object->name;
 
@@ -481,14 +531,27 @@ class WP_Plugin_ChronoArchive {
 				foreach ( (array) $results as $result ) {
 					if ( $result->post_date != '0000-00-00 00:00:00' ) {
 						$url = get_permalink( (int) $result->ID );
-						$text = $result->post_title ? strip_tags( apply_filters( 'the_title', $result->post_title, $result->ID ) ) : $result->ID;
+						$filtered_title = $result->post_title ? apply_filters( 'the_title', $result->post_title, $result->ID ) : $result->ID;
+						$text = is_scalar( $filtered_title ) ? wp_strip_all_tags( (string) $filtered_title ) : (string) $result->ID;
 						$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
 					}
 				}
 			}
 		}
 		if ( $r['echo'] ) {
-			echo $output;
+			// Archive links originate from WordPress get_archives_link(), but
+			// different formats require distinct HTML allowlists at the sink.
+			if ( 'option' === $r['format'] ) {
+				echo wp_kses( $output, array(
+					'option' => array( 'value' => true ),
+				) );
+			} elseif ( 'link' === $r['format'] ) {
+				echo wp_kses( $output, array(
+					'link' => array( 'rel' => true, 'title' => true, 'href' => true ),
+				) );
+			} else {
+				echo wp_kses_post( $output );
+			}
 		} else {
 			return $output;
 		}
@@ -613,99 +676,59 @@ class WP_Plugin_ChronoArchive {
 	 * Options page callback.
 	 */
 	function options_page() {
-		$like_it_arr = array(
-			__( 'really tied the room together', 'ChronoArchive' ),
-			__( 'made you feel all warm and fuzzy on the inside', 'ChronoArchive' ),
-			__( 'restored your faith in humanity... even if only for a fleeting second', 'ChronoArchive' ),
-			__( 'rocked your world', 'ChronoArchive' ),
-			__( 'inspired you to commit a random act of kindness', 'ChronoArchive' ),
-			__( 'encouraged more regular flossing of the teeth', 'ChronoArchive' ),
-			__( 'helped organize your life in the small ways that matter', 'ChronoArchive' ),
-			__( 'saved your minutes--if not tens of minutes--writing your own solution', 'ChronoArchive' ),
-			__( 'brightened your day... or darkened if you are trying to sleep in', 'ChronoArchive' ),
-			__( 'caused you to dance a little jig of joy and joyousness', 'ChronoArchive' ),
-			__( 'inspired you to tweet a little @twinpictues social love', 'ChronoArchive' ),
-			__( 'tasted great, while also being less filling', 'ChronoArchive' ),
-			__( 'caused you to shout: "everybody spread love, give me some mo!"', 'ChronoArchive' ),
-			__( 'helped you keep the funk alive', 'ChronoArchive' ),
-			__( '<a href="https://www.youtube.com/watch?v=dvQ28F5fOdU" target="_blank">soften hands while you do dishes</a>', 'ChronoArchive' ),
-			__( 'helped that little old lady <a href="https://www.youtube.com/watch?v=Ug75diEyiA0" target="_blank">find the beef</a>', 'ChronoArchive' )
-		);
-		$rand_key = array_rand( $like_it_arr );
-		$like_it = $like_it_arr[ $rand_key ];
+		// The settings page must never render for unprivileged users, even when
+		// invoked directly outside its capability-gated admin_menu registration.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$this->_set_options();
+		$options = $this->options;
 		?>
 		<div class="wrap">
-			<h2><?php echo $this->plugin_name; ?></h2>
-		</div>
-
-		<div class="postbox-container metabox-holder meta-box-sortables" style="width: 69%">
-			<div style="margin:0 5px;">
-				<div class="postbox">
-					<div class="handlediv" title="<?php _e( 'Click to toggle', 'ChronoArchive' ); ?>"><br/></div>
-					<h3 class="handle"><?php _e( 'ChronoArchive Settings', 'ChronoArchive' ); ?></h3>
-					<div class="inside">
-						<form method="post" action="options.php">
-							<?php
-								settings_fields( $this->domain );
-								$this->_set_options();
-								$options = $this->options;
-							?>
-
-							<fieldset class="options">
-								<table class="form-table">
-									<tr>
-										<th><?php _e( 'Custom Style', 'ChronoArchive' ); ?>:</th>
-										<td>
-											<label>
-												<textarea id="<?php echo $this->options_name; ?>[custom_css]" name="<?php echo $this->options_name; ?>[custom_css]" style="width: 100%; height: 150px;"><?php echo esc_attr( $options['custom_css'] ); ?></textarea>
-												<br /><span class="description"><?php _e( 'Custom CSS style for ultimate flexibility', 'ChronoArchive' ); ?></span>
-											</label>
-										</td>
-									</tr>
-									<tr>
-										<th><?php _e( 'CPT Archive Permalinks', 'ChronoArchive' ); ?>:</th>
-										<td>
-											<label>
-												<input type="checkbox" id="use_cpt_archive" name="<?php echo esc_attr( $this->options_name ); ?>[use_cpt_archive]" value="1" <?php echo checked( $options['use_cpt_archive'], 1 ); ?> /> <?php _e( 'Use CPT Archive Permalinks', 'ChronoArchive' ); ?>
-												<br /><span class="description"><?php printf( __( 'Use %sget_post_type_archive_link%s to generate the permalink for custom post type archives.', 'ChronoArchive' ), '<a href="https://developer.wordpress.org/reference/functions/get_post_type_archive_link/" target="_blank">', '</a>' ); ?></span>
-											</label>
-										</td>
-									</tr>
-									<tr>
-										<th><?php _e( 'Level Up!', 'ChronoArchive' ); ?>:</th>
-										<td>
-											<p><?php printf( __( '%sArchive-Pro-Matic%s offers advanced features such as archives by quarter, season, and multiple categories, along with very high-level personal support.', 'ChronoArchive' ), '<a href="https://pluginoven.com/premium-plugins/archive-pro-matic/?utm_source=ChronoArchive&utm_medium=plugin-settings-page&utm_content=archive-pro-matic&utm_campaign=archive-pro-level-up">', '</a>' ); ?></p>
-										</td>
-									</tr>
-								</table>
-							</fieldset>
-
-							<p class="submit" style="margin-bottom: 20px;">
-								<input class="button-primary" type="submit" value="<?php _e( 'Save Changes', 'ChronoArchive' ); ?>" style="float: right;" />
+			<h1><?php echo esc_html( $this->plugin_name ); ?></h1>
+			<p><?php esc_html_e( 'Display chronological archives with shortcodes or a classic widget.', 'ChronoArchive' ); ?></p>
+			<form method="post" action="options.php">
+				<?php settings_fields( $this->domain ); ?>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row">
+							<label for="chronoarchive-custom-css"><?php esc_html_e( 'Custom CSS', 'ChronoArchive' ); ?></label>
+						</th>
+						<td>
+							<textarea id="chronoarchive-custom-css"
+								name="<?php echo esc_attr( $this->options_name ); ?>[custom_css]"
+								rows="7" cols="70" class="large-text code"><?php echo esc_textarea( $options['custom_css'] ); ?></textarea>
+							<p class="description">
+								<?php esc_html_e( 'Custom CSS is output through the WordPress Styles API. Restrict this setting to trusted administrators.', 'ChronoArchive' ); ?>
 							</p>
-						</form>
-					</div>
-				</div>
-			</div>
-		</div>
-
-		<div class="postbox-container side metabox-holder meta-box-sortables" style="width:29%;">
-			<div style="margin:0 5px;">
-				<div class="postbox">
-					<div class="handlediv" title="<?php _e( 'Click to toggle', 'ChronoArchive' ); ?>"><br/></div>
-					<h3 class="handle"><?php _e( 'About', 'ChronoArchive' ); ?></h3>
-					<div class="inside">
-						<h4><?php echo $this->plugin_name; ?> <?php _e( 'Version', 'ChronoArchive' ); ?> <?php echo $this->version; ?></h4>
-						<p><?php printf( __( 'A complete listing of shortcode options and attribute demos is available, as well as free, open-source community support. ChronoArchive is a fork of the Annual Archive plugin originally developed by Twinpictures and distributed under the GPL.', 'ChronoArchive' ) ); ?></p>
-						<ul>
-							<li><?php printf( __( '%sDetailed documentation%s, complete with working demonstrations of all shortcode attributes, is available for your instructional enjoyment.', 'ChronoArchive' ), '<a href="https://pluginoven.com/plugins/annual-archive/documentation/" target="_blank">', '</a>' ); ?></li>
-							<li><?php printf( __( 'If you enjoy this plugin, please consider %ssharing your story%s with others.', 'ChronoArchive' ), '<a href="https://wordpress.org/support/plugin/anual-archive/reviews/" target="_blank">', '</a>' ); ?></li>
-							<li><?php printf( __( 'Your %sreviews%s, %sbug reports, feedback%s and %scocktail recipes%s are always welcomed.', 'ChronoArchive' ), '<a href="https://wordpress.org/support/plugin/anual-archive/reviews/">', '</a>', '<a href="https://wordpress.org/support/plugin/anual-archive/">', '</a>', '<a href="https://www.facebook.com/twinpictures">', '</a>' ); ?></li>
-						</ul>
-					</div>
-				</div>
-			</div>
-			<div class="clear"></div>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Custom post type archive links', 'ChronoArchive' ); ?></th>
+						<td>
+							<label for="chronoarchive-cpt-archive">
+								<input type="checkbox" id="chronoarchive-cpt-archive"
+									name="<?php echo esc_attr( $this->options_name ); ?>[use_cpt_archive]"
+									value="1" <?php checked( $options['use_cpt_archive'], '1' ); ?> />
+								<?php esc_html_e( 'Prefer registered custom post type archive URLs when available', 'ChronoArchive' ); ?>
+							</label>
+							<p class="description"><?php esc_html_e( 'Post types without a public archive base fall back to the normal WordPress archive URL with a post_type parameter.', 'ChronoArchive' ); ?></p>
+						</td>
+					</tr>
+				</table>
+				<?php submit_button(); ?>
+			</form>
+			<p class="description">
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: %s: plugin version. */
+						__( 'ChronoArchive %s. Fork of Annual Archive by Twinpictures, distributed under the GPL.', 'ChronoArchive' ),
+						$this->version
+					)
+				);
+				?>
+			</p>
 		</div>
 		<?php
 	}
@@ -715,15 +738,21 @@ class WP_Plugin_ChronoArchive {
 	 */
 	function _set_options() {
 		$saved_options = get_option( $this->options_name );
-		// Backwards compatibility: check for old options.
-		if ( empty( $saved_options ) ) {
+		// Preserve settings from historic installations without trusting types.
+		if ( ! is_array( $saved_options ) || empty( $saved_options ) ) {
 			$saved_options = get_option( $this->domain . 'options' );
 		}
-		if ( ! empty( $saved_options ) ) {
-			foreach ( $this->options as $key => $option ) {
-				$this->options[ $key ] = empty( $saved_options[ $key ] ) ? '' : $saved_options[ $key ];
-			}
+		if ( ! is_array( $saved_options ) ) {
+			return;
 		}
+		$this->options['custom_css'] = isset( $saved_options['custom_css'] ) &&
+			is_string( $saved_options['custom_css'] )
+			? substr( $saved_options['custom_css'], 0, 20000 )
+			: '';
+		$this->options['use_cpt_archive'] = ! empty( $saved_options['use_cpt_archive'] ) &&
+			is_scalar( $saved_options['use_cpt_archive'] )
+			? '1'
+			: '';
 	}
 
 } // end class WP_Plugin_ChronoArchive
@@ -737,6 +766,19 @@ $WP_Plugin_ChronoArchive = new WP_Plugin_ChronoArchive();
  * ChronoArchive Widget Class.
  */
 class ChronoArchive_Widget extends WP_Widget {
+
+	/**
+	 * Read a scalar from legacy widget storage, avoiding PHP type errors.
+	 *
+	 * @param array  $instance Stored widget settings.
+	 * @param string $key      Option name.
+	 * @param string $default  Value if absent or malformed.
+	 * @return string
+	 */
+	private static function legacy_text( $instance, $key, $default = '' ) {
+		$value = isset( $instance[ $key ] ) ? $instance[ $key ] : $default;
+		return is_scalar( $value ) ? stripslashes( (string) $value ) : $default;
+	}
 
 	/**
 	 * Constructor.
@@ -756,28 +798,38 @@ class ChronoArchive_Widget extends WP_Widget {
 	 * @param array $instance Instance settings.
 	 */
 	function widget( $args, $instance ) {
-		extract( $args );
+		// Explicitly read only trusted WordPress theme wrappers. Never extract()
+		// arbitrary keys into local variables, where they could overwrite state.
+		$before_widget = isset( $args['before_widget'] ) && is_string( $args['before_widget'] ) ? $args['before_widget'] : '';
+		$after_widget  = isset( $args['after_widget'] ) && is_string( $args['after_widget'] ) ? $args['after_widget'] : '';
+		$before_title  = isset( $args['before_title'] ) && is_string( $args['before_title'] ) ? $args['before_title'] : '';
+		$after_title   = isset( $args['after_title'] ) && is_string( $args['after_title'] ) ? $args['after_title'] : '';
+		$instance = is_array( $instance ) ? $instance : array();
 
 		$format         = empty( $instance['format'] ) ? 'html' : apply_filters( 'widget_format', $instance['format'] );
+		$format         = is_string( $format ) && in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
 		$type           = empty( $instance['type'] ) ? 'yearly' : apply_filters( 'widget_type', $instance['type'] );
-		$before         = wp_kses_post( empty( $instance['before'] ) ? '' : apply_filters( 'widget_before', $instance['before'] ) );
-		$after          = wp_kses_post( empty( $instance['after'] ) ? '' : apply_filters( 'widget_after', $instance['after'] ) );
+		$before_raw    = empty( $instance['before'] ) ? '' : apply_filters( 'widget_before', $instance['before'] );
+		$after_raw     = empty( $instance['after'] ) ? '' : apply_filters( 'widget_after', $instance['after'] );
+		$before         = wp_kses_post( is_scalar( $before_raw ) ? (string) $before_raw : '' );
+		$after          = wp_kses_post( is_scalar( $after_raw ) ? (string) $after_raw : '' );
 		$limit          = apply_filters( 'widget_limit', isset( $instance['limit'] ) ? $instance['limit'] : '' );
-		$title          = apply_filters( 'widget_title', empty( $instance['title'] ) ? '' : $instance['title'], $instance, $this->id_base );
+		$title          = apply_filters( 'widget_title', self::legacy_text( $instance, 'title' ), $instance, $this->id_base );
 		$show_post_count= empty( $instance['show_post_count'] ) ? 0 : $instance['show_post_count'];
 		$order          = empty( $instance['order'] ) ? 'DESC' : apply_filters( 'widget_order', $instance['order'] );
 		$alpha_order    = empty( $instance['alpha_order'] ) ? 'ASC' : apply_filters( 'widget_alpha_order', $instance['alpha_order'] );
 		$post_order     = empty( $instance['post_order'] ) ? 'DESC' : apply_filters( 'widget_post_order', $instance['post_order'] );
 		$select_text    = empty( $instance['select_text'] ) ? '' : apply_filters( 'widget_slelect_text', $instance['select_text'] );
+		$select_text    = is_scalar( $select_text ) ? sanitize_text_field( (string) $select_text ) : '';
 		$post_type      = empty( $instance['post_type'] ) ? 'post' : apply_filters( 'widget_post_type', $instance['post_type'] );
 
 		if ( empty( $show_post_count ) && ! empty( $instance['showcount'] ) ) {
 			$show_post_count = $instance['showcount'];
 		}
 
-		echo $before_widget;
-		if ( $title ) {
-			echo $before_title . esc_html( $title ) . $after_title;
+		echo wp_kses_post( $before_widget );
+		if ( is_scalar( $title ) && '' !== (string) $title ) {
+			echo wp_kses_post( $before_title ) . esc_html( (string) $title ) . wp_kses_post( $after_title );
 		}
 
 		if ( $format == 'option' ) {
@@ -820,7 +872,7 @@ class ChronoArchive_Widget extends WP_Widget {
 			<?php
 		}
 
-		echo $after_widget;
+		echo wp_kses_post( $after_widget );
 	}
 
 	/**
@@ -833,19 +885,19 @@ class ChronoArchive_Widget extends WP_Widget {
 	function update( $new_instance, $old_instance ) {
 		$instance = is_array( $old_instance ) ? $old_instance : array();
 		$new_instance = is_array( $new_instance ) ? $new_instance : array();
-		$instance['title'] = sanitize_text_field( $new_instance['title'] ?? '' );
-		$instance['before'] = wp_kses_post( $new_instance['before'] ?? '' );
-		$instance['after'] = wp_kses_post( $new_instance['after'] ?? '' );
-		$instance['select_text'] = sanitize_text_field( $new_instance['select_text'] ?? '' );
-		$instance['limit'] = empty( $new_instance['limit'] ) ? '' : absint( $new_instance['limit'] );
+		$instance['title'] = sanitize_text_field( self::legacy_text( $new_instance, 'title' ) );
+		$instance['before'] = wp_kses_post( self::legacy_text( $new_instance, 'before' ) );
+		$instance['after'] = wp_kses_post( self::legacy_text( $new_instance, 'after' ) );
+		$instance['select_text'] = sanitize_text_field( self::legacy_text( $new_instance, 'select_text' ) );
+		$instance['limit'] = empty( $new_instance['limit'] ) ? '' : absint( self::legacy_text( $new_instance, 'limit' ) );
 		$instance['show_post_count'] = ! empty( $new_instance['show_post_count'] ) ? 1 : 0;
-		$instance['post_type'] = sanitize_key( $new_instance['post_type'] ?? 'post' );
-		$type = sanitize_key( $new_instance['type'] ?? 'yearly' );
+		$instance['post_type'] = sanitize_key( self::legacy_text( $new_instance, 'post_type', 'post' ) );
+		$type = sanitize_key( self::legacy_text( $new_instance, 'type', 'yearly' ) );
 		$instance['type'] = in_array( $type, array( 'daily', 'weekly', 'monthly', 'yearly', 'decade', 'alpha', 'postbypost' ), true ) ? $type : 'yearly';
-		$format = sanitize_key( $new_instance['format'] ?? 'html' );
+		$format = sanitize_key( self::legacy_text( $new_instance, 'format', 'html' ) );
 		$instance['format'] = in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
 		foreach ( array( 'order' => 'DESC', 'alpha_order' => 'ASC', 'post_order' => 'DESC' ) as $field => $default ) {
-			$value = strtoupper( (string) ( $new_instance[ $field ] ?? $default ) );
+			$value = strtoupper( self::legacy_text( $new_instance, $field, $default ) );
 			$instance[ $field ] = in_array( $value, array( 'ASC', 'DESC' ), true ) ? $value : $default;
 		}
 		return $instance;
@@ -857,18 +909,19 @@ class ChronoArchive_Widget extends WP_Widget {
 	 * @param array $instance Current settings.
 	 */
 	function form( $instance ) {
-		$title = empty( $instance['title'] ) ? '' : stripslashes( $instance['title'] );
+		$instance = is_array( $instance ) ? $instance : array();
+		$title = self::legacy_text( $instance, 'title' );
 		$show_post_count = empty( $instance['show_post_count'] ) ? 0 : $instance['show_post_count'];
-		$format = empty( $instance['format'] ) ? '' : stripslashes( $instance['format'] );
-		$before = empty( $instance['before'] ) ? '' : stripslashes( $instance['before'] );
-		$after = empty( $instance['after'] ) ? '' : stripslashes( $instance['after'] );
-		$type = empty( $instance['type'] ) ? '' : strip_tags( $instance['type'] );
-		$limit = empty( $instance['limit'] ) ? '' : stripslashes( $instance['limit'] );
-		$post_type = empty( $instance['post_type'] ) ? 'post' : stripslashes( $instance['post_type'] );
-		$order = empty( $instance['order'] ) ? 'DESC' : stripslashes( $instance['order'] );
-		$alpha_order = empty( $instance['alpha_order'] ) ? 'ASC' : stripslashes( $instance['alpha_order'] );
-		$post_order = empty( $instance['post_order'] ) ? 'DESC' : stripslashes( $instance['post_order'] );
-		$select_text = empty( $instance['select_text'] ) ? '' : stripslashes( $instance['select_text'] );
+		$format = self::legacy_text( $instance, 'format' );
+		$before = self::legacy_text( $instance, 'before' );
+		$after = self::legacy_text( $instance, 'after' );
+		$type = wp_strip_all_tags( self::legacy_text( $instance, 'type' ) );
+		$limit = self::legacy_text( $instance, 'limit' );
+		$post_type = self::legacy_text( $instance, 'post_type', 'post' );
+		$order = self::legacy_text( $instance, 'order', 'DESC' );
+		$alpha_order = self::legacy_text( $instance, 'alpha_order', 'ASC' );
+		$post_order = self::legacy_text( $instance, 'post_order', 'DESC' );
+		$select_text = self::legacy_text( $instance, 'select_text' );
 
 		if ( empty( $show_post_count ) && ! empty( $instance['showcount'] ) ) {
 			$show_post_count = $instance['showcount'];
@@ -876,18 +929,18 @@ class ChronoArchive_Widget extends WP_Widget {
 		?>
 		<p>
 			<label for="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>">
-				<?php _e( 'Title:', 'ChronoArchive' ); ?>
+				<?php esc_html_e( 'Title:', 'ChronoArchive' ); ?>
 				<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'title' ) ); ?>" type="text" value="<?php echo esc_attr( $title ); ?>" />
 			</label>
 		</p>
 		<p>
 			<label for="<?php echo esc_attr( $this->get_field_id( 'show_post_count' ) ); ?>">
 				<input type="checkbox" id="<?php echo esc_attr( $this->get_field_id( 'show_post_count' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'show_post_count' ) ); ?>" value="1" <?php checked( $show_post_count, 1 ); ?> />
-				&nbsp;&nbsp;<?php _e( 'Show post counts', 'ChronoArchive' ); ?>
+				&nbsp;&nbsp;<?php esc_html_e( 'Show post counts', 'ChronoArchive' ); ?>
 			</label>
 		</p>
 		<p>
-			<label><?php _e( 'Archive type:', 'ChronoArchive' ); ?>
+			<label><?php esc_html_e( 'Archive type:', 'ChronoArchive' ); ?>
 				<select name="<?php echo esc_attr( $this->get_field_name( 'type' ) ); ?>" id="<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" class="annual_archive_type_select">
 					<?php
 						$types_arr = array(
@@ -905,31 +958,31 @@ class ChronoArchive_Widget extends WP_Widget {
 						$post_style  = 'style="display: none;"';
 
 						foreach ( $types_arr as $key => $value ) {
-							$selected = ( $key == $type || ( ! $type && $key == 'yearly' ) ) ? 'SELECTED' : '';
+							// WordPress core selected() will print the safe selected attribute.
 							// Set data attribute for ordering fields.
-							$data_att = 'data-orderfield="wrap_' . $this->get_field_id('order') . '"';
+							$data_att = 'wrap_' . $this->get_field_id( 'order' );
 							if ( $key == 'alpha' ) {
-								$data_att = 'data-orderfield="wrap_' . $this->get_field_id('alpha_order') . '"';
+								$data_att = 'wrap_' . $this->get_field_id( 'alpha_order' );
 								if ( $key == $type ) {
 									$order_style = 'style="display: none;"';
 									$alpha_style = '';
 								}
 							}
 							if ( $key == 'postbypost' ) {
-								$data_att = 'data-orderfield="wrap_' . $this->get_field_id('post_order') . '"';
+								$data_att = 'wrap_' . $this->get_field_id( 'post_order' );
 								if ( $key == $type ) {
 									$order_style = 'style="display: none;"';
 									$post_style  = '';
 								}
 							}
-							echo '<option value="' . $key . '" ' . $data_att . ' ' . $selected . '>' . $value . '</option>';
+							echo '<option value="' . esc_attr( $key ) . '" data-orderfield="' . esc_attr( $data_att ) . '"' . selected( $key, $type ? $type : 'yearly', false ) . '>' . esc_html( $value ) . '</option>';
 						}
 					?>
 				</select>
 			</label>
 		</p>
 		<p>
-			<label><?php _e( 'Format:', 'ChronoArchive' ); ?>
+			<label><?php esc_html_e( 'Format:', 'ChronoArchive' ); ?>
 				<select name="<?php echo esc_attr( $this->get_field_name( 'format' ) ); ?>" id="<?php echo esc_attr( $this->get_field_id( 'format' ) ); ?>">
 					<?php
 						$format_arr = array(
@@ -939,63 +992,63 @@ class ChronoArchive_Widget extends WP_Widget {
 							'custom' => __( 'Custom', 'ChronoArchive' )
 						);
 						foreach ( $format_arr as $key => $value ) {
-							$selected = ( $key == $format || ( ! $format && $key == 'html' ) ) ? 'SELECTED' : '';
-							echo '<option value="' . $key . '" ' . $selected . '>' . $value . '</option>';
+							// WordPress core selected() handles safe selected attribute.
+							echo '<option value="' . esc_attr( $key ) . '"' . selected( $key, $format ? $format : 'html', false ) . '>' . esc_html( $value ) . '</option>';
 						}
 					?>
 				</select>
 			</label>
 			<br/>
 			<span class="description">
-				<a href="https://developer.wordpress.org/reference/functions/wp_get_archives/#parameters" target="_blank"><?php _e( 'Format details', 'ChronoArchive' ); ?></a>
+				<a href="https://developer.wordpress.org/reference/functions/wp_get_archives/#parameters" target="_blank"><?php esc_html_e( 'Format details', 'ChronoArchive' ); ?></a>
 			</span>
 		</p>
 		<p>
-			<label><?php _e( 'Post Type:', 'ChronoArchive' ); ?>
+			<label><?php esc_html_e( 'Post Type:', 'ChronoArchive' ); ?>
 				<select name="<?php echo esc_attr( $this->get_field_name( 'post_type' ) ); ?>" id="<?php echo esc_attr( $this->get_field_id( 'post_type' ) ); ?>">
 					<?php
 						$pt_args = array( 'public' => true );
 						$post_types = get_post_types( $pt_args );
 						foreach ( $post_types as $type ) {
-							$selected = ( $type == $post_type ) ? 'SELECTED' : '';
-							echo '<option value="' . $type . '" ' . $selected . '>' . $type . '</option>';
+							// Keep the post type name as data until late escaping.
+							echo '<option value="' . esc_attr( $type ) . '"' . selected( $type, $post_type, false ) . '>' . esc_html( $type ) . '</option>';
 						}
 					?>
 				</select>
 			</label>
 			<br/>
 			<span class="description">
-				<a href="https://developer.wordpress.org/reference/functions/wp_get_archives/#parameters" target="_blank"><?php _e( 'Post Type', 'ChronoArchive' ); ?></a>
+				<a href="https://developer.wordpress.org/reference/functions/wp_get_archives/#parameters" target="_blank"><?php esc_html_e( 'Post Type', 'ChronoArchive' ); ?></a>
 			</span>
 		</p>
 		<p>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'before' ) ); ?>"><?php _e( 'Text Before Link:', 'ChronoArchive' ); ?></label>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'before' ) ); ?>"><?php esc_html_e( 'Text Before Link:', 'ChronoArchive' ); ?></label>
 			<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'before' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'before' ) ); ?>" type="text" value="<?php echo esc_attr( $before ); ?>" />
 		</p>
 		<p>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'after' ) ); ?>"><?php _e( 'Text After Link:', 'ChronoArchive' ); ?></label>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'after' ) ); ?>"><?php esc_html_e( 'Text After Link:', 'ChronoArchive' ); ?></label>
 			<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'after' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'after' ) ); ?>" type="text" value="<?php echo esc_attr( $after ); ?>" />
 		</p>
 		<p>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'select_text' ) ); ?>"><?php _e( 'Select Text:', 'ChronoArchive' ); ?></label>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'select_text' ) ); ?>"><?php esc_html_e( 'Select Text:', 'ChronoArchive' ); ?></label>
 			<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'select_text' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'select_text' ) ); ?>" type="text" value="<?php echo esc_attr( $select_text ); ?>" />
 		</p>
 		<p>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'limit' ) ); ?>"><?php _e( 'Number of archives to display:', 'ChronoArchive' ); ?></label>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'limit' ) ); ?>"><?php esc_html_e( 'Number of archives to display:', 'ChronoArchive' ); ?></label>
 			<input class="widefat" style="width: 50px;" id="<?php echo esc_attr( $this->get_field_id( 'limit' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'limit' ) ); ?>" type="text" value="<?php echo esc_attr( $limit ); ?>" />
 		</p>
-		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php echo $order_style; ?>>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'order' ) ); ?>"><?php _e( 'Sort order:', 'ChronoArchive' ); ?></label>
+		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php if ( '' !== $order_style ) : ?>style="display: none;"<?php endif; ?>>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'order' ) ); ?>"><?php esc_html_e( 'Sort order:', 'ChronoArchive' ); ?></label>
 			<input id="<?php echo esc_attr( $this->get_field_id( 'order' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'order' ) ); ?>" type="radio" value="DESC" <?php checked( $order, 'DESC' ); ?> /> DESC
 			<input name="<?php echo esc_attr( $this->get_field_name( 'order' ) ); ?>" type="radio" value="ASC" <?php checked( $order, 'ASC' ); ?> /> ASC
 		</p>
-		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'alpha_order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php echo $alpha_style; ?>>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'alpha_order' ) ); ?>"><?php _e( 'Alpha order:', 'ChronoArchive' ); ?></label>
+		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'alpha_order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php if ( '' !== $alpha_style ) : ?>style="display: none;"<?php endif; ?>>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'alpha_order' ) ); ?>"><?php esc_html_e( 'Alpha order:', 'ChronoArchive' ); ?></label>
 			<input id="<?php echo esc_attr( $this->get_field_id( 'alpha_order' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'alpha_order' ) ); ?>" type="radio" value="DESC" <?php checked( $alpha_order, 'DESC' ); ?> /> DESC
 			<input name="<?php echo esc_attr( $this->get_field_name( 'alpha_order' ) ); ?>" type="radio" value="ASC" <?php checked( $alpha_order, 'ASC' ); ?> /> ASC
 		</p>
-		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'post_order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php echo $post_style; ?>>
-			<label for="<?php echo esc_attr( $this->get_field_id( 'post_order' ) ); ?>"><?php _e( 'Post order:', 'ChronoArchive' ); ?></label>
+		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'post_order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php if ( '' !== $post_style ) : ?>style="display: none;"<?php endif; ?>>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'post_order' ) ); ?>"><?php esc_html_e( 'Post order:', 'ChronoArchive' ); ?></label>
 			<input id="<?php echo esc_attr( $this->get_field_id( 'post_order' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'post_order' ) ); ?>" type="radio" value="DESC" <?php checked( $post_order, 'DESC' ); ?> /> DESC
 			<input name="<?php echo esc_attr( $this->get_field_name( 'post_order' ) ); ?>" type="radio" value="ASC" <?php checked( $post_order, 'ASC' ); ?> /> ASC
 		</p>
@@ -1010,5 +1063,4 @@ function ChronoArchive_register_widget() {
 	register_widget( 'ChronoArchive_Widget' );
 }
 add_action( 'widgets_init', 'ChronoArchive_register_widget' );
-?>
 

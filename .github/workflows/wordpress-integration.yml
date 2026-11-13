@@ -1,0 +1,79 @@
+name: WordPress integration
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  wordpress-integration:
+    name: WP ${{ matrix.wp }} / PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {php: '7.2', wp: '6.5.5'}
+          - {php: '8.2', wp: '6.5.5'}
+          - {php: '8.2', wp: 'latest'}
+          - {php: '8.4', wp: 'latest'}
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: test-only-ci-root
+          MARIADB_DATABASE: chronoarchive_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -u root -ptest-only-ci-root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mysqli, mbstring, zip
+          coverage: none
+      - name: Install isolated WordPress and WP-CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --retry 3 \
+            https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
+            --output /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar --info
+          core_args=()
+          if [[ '${{ matrix.wp }}' != 'latest' ]]; then
+            core_args+=(--version='${{ matrix.wp }}')
+          fi
+          php /tmp/wp-cli.phar core download --path=/tmp/chrono-wp --skip-content "${core_args[@]}"
+          php /tmp/wp-cli.phar config create \
+            --path=/tmp/chrono-wp \
+            --dbname=chronoarchive_ci \
+            --dbuser=root \
+            --dbpass=test-only-ci-root \
+            --dbhost=127.0.0.1:3306
+          php /tmp/wp-cli.phar core install \
+            --path=/tmp/chrono-wp \
+            --url=http://localhost \
+            --title=chronoarchive-ci \
+            --admin_user=ci_admin \
+            --admin_password=ci-only-password-unsafe-to-reuse \
+            --admin_email=ci@example.test \
+            --skip-email
+          mkdir -p /tmp/chrono-wp/wp-content/plugins/chronoarchive
+          cp chronoarchive.php readme.txt /tmp/chrono-wp/wp-content/plugins/chronoarchive/
+          cp -R assets js tests /tmp/chrono-wp/wp-content/plugins/chronoarchive/
+          php /tmp/wp-cli.phar plugin activate chronoarchive --path=/tmp/chrono-wp
+      - name: Run real WordPress integration checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file \
+            /tmp/chrono-wp/wp-content/plugins/chronoarchive/tests/wp-integration.php \
+            --path=/tmp/chrono-wp
