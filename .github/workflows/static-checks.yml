@@ -49,3 +49,19 @@ jobs:
           test -f chronoarchive.php || exit 1
           find assets js -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
 
+  metadata-schema:
+    name: Plugin/readme metadata consistency (development)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate metadata schema and i18n domain
+        run: python3 scripts/check-release-metadata.py
+      - name: Ensure this beta cannot pass the stable-release gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if python3 scripts/check-release-metadata.py --release; then
+            echo "::error::A development beta incorrectly passed the stable-release gate."
+            exit 1
+          fi
+          echo "PASS: prerelease version correctly blocks stable publishing."
