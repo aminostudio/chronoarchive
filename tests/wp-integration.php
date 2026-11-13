@@ -10,7 +10,9 @@
 if ( ! defined( 'ABSPATH' ) ) {
     exit( 1 );
 }
-global $wpdb, $WP_Plugin_ChronoArchive;
+global $wpdb;
+// WP loads plugin sources inside its loader scope; their variables are not global.
+$plugin_under_test = new WP_Plugin_ChronoArchive();
 
 $passed = 0;
 $failed = 0;
@@ -92,7 +94,7 @@ $main_backup = $GLOBALS['wp_the_query'];
 $query = new WP_Query();
 $GLOBALS['wp_the_query'] = $query;
 $query->parse_query( array( 'year' => 2019, 'chrono_week' => '2019-12-30' ) );
-$WP_Plugin_ChronoArchive->ChronoArchive_decade_filter( $query );
+$plugin_under_test->ChronoArchive_decade_filter( $query );
 $dates = $query->get( 'date_query' );
 $assert( 'Week rewrites main archive query', is_array( $dates ) &&
     '2019-12-30' === ( $dates[0]['after'] ?? '' ) &&
@@ -103,7 +105,7 @@ $GLOBALS['wp_the_query'] = $main_backup;
 $query = new WP_Query();
 $GLOBALS['wp_the_query'] = $query;
 $query->parse_query( array( 'year' => 2025, 'decade' => '2025' ) );
-$WP_Plugin_ChronoArchive->ChronoArchive_decade_filter( $query );
+$plugin_under_test->ChronoArchive_decade_filter( $query );
 $assert( 'Invalid decade fails closed', array( 0 ) === $query->get( 'post__in' ) );
 $GLOBALS['wp_the_query'] = $main_backup;
 
@@ -130,7 +132,7 @@ $assert( 'Classic widget renders archive links', false !== strpos( $widget_outpu
 $old_user = get_current_user_id();
 wp_set_current_user( 0 );
 ob_start();
-$WP_Plugin_ChronoArchive->options_page();
+$plugin_under_test->options_page();
 $guest_page = ob_get_clean();
 $assert( 'Settings page is not shown without capability', '' === $guest_page );
 wp_set_current_user( $old_user );
