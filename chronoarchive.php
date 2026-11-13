@@ -798,6 +798,19 @@ $WP_Plugin_ChronoArchive = new WP_Plugin_ChronoArchive();
 class ChronoArchive_Widget extends WP_Widget {
 
 	/**
+	 * Read a scalar from legacy widget storage, avoiding PHP type errors.
+	 *
+	 * @param array  $instance Stored widget settings.
+	 * @param string $key      Option name.
+	 * @param string $default  Value if absent or malformed.
+	 * @return string
+	 */
+	private static function legacy_text( $instance, $key, $default = '' ) {
+		$value = isset( $instance[ $key ] ) ? $instance[ $key ] : $default;
+		return is_scalar( $value ) ? stripslashes( (string) $value ) : $default;
+	}
+
+	/**
 	 * Constructor.
 	 */
 	function __construct() {
@@ -824,11 +837,14 @@ class ChronoArchive_Widget extends WP_Widget {
 		$instance = is_array( $instance ) ? $instance : array();
 
 		$format         = empty( $instance['format'] ) ? 'html' : apply_filters( 'widget_format', $instance['format'] );
+		$format         = is_string( $format ) && in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
 		$type           = empty( $instance['type'] ) ? 'yearly' : apply_filters( 'widget_type', $instance['type'] );
-		$before         = wp_kses_post( empty( $instance['before'] ) ? '' : apply_filters( 'widget_before', $instance['before'] ) );
-		$after          = wp_kses_post( empty( $instance['after'] ) ? '' : apply_filters( 'widget_after', $instance['after'] ) );
+		$before_raw    = empty( $instance['before'] ) ? '' : apply_filters( 'widget_before', $instance['before'] );
+		$after_raw     = empty( $instance['after'] ) ? '' : apply_filters( 'widget_after', $instance['after'] );
+		$before         = wp_kses_post( is_scalar( $before_raw ) ? (string) $before_raw : '' );
+		$after          = wp_kses_post( is_scalar( $after_raw ) ? (string) $after_raw : '' );
 		$limit          = apply_filters( 'widget_limit', isset( $instance['limit'] ) ? $instance['limit'] : '' );
-		$title          = apply_filters( 'widget_title', empty( $instance['title'] ) ? '' : $instance['title'], $instance, $this->id_base );
+		$title          = apply_filters( 'widget_title', self::legacy_text( $instance, 'title' ), $instance, $this->id_base );
 		$show_post_count= empty( $instance['show_post_count'] ) ? 0 : $instance['show_post_count'];
 		$order          = empty( $instance['order'] ) ? 'DESC' : apply_filters( 'widget_order', $instance['order'] );
 		$alpha_order    = empty( $instance['alpha_order'] ) ? 'ASC' : apply_filters( 'widget_alpha_order', $instance['alpha_order'] );
@@ -899,19 +915,19 @@ class ChronoArchive_Widget extends WP_Widget {
 	function update( $new_instance, $old_instance ) {
 		$instance = is_array( $old_instance ) ? $old_instance : array();
 		$new_instance = is_array( $new_instance ) ? $new_instance : array();
-		$instance['title'] = sanitize_text_field( $new_instance['title'] ?? '' );
-		$instance['before'] = wp_kses_post( $new_instance['before'] ?? '' );
-		$instance['after'] = wp_kses_post( $new_instance['after'] ?? '' );
-		$instance['select_text'] = sanitize_text_field( $new_instance['select_text'] ?? '' );
-		$instance['limit'] = empty( $new_instance['limit'] ) ? '' : absint( $new_instance['limit'] );
+		$instance['title'] = sanitize_text_field( self::legacy_text( $new_instance, 'title' ) );
+		$instance['before'] = wp_kses_post( self::legacy_text( $new_instance, 'before' ) );
+		$instance['after'] = wp_kses_post( self::legacy_text( $new_instance, 'after' ) );
+		$instance['select_text'] = sanitize_text_field( self::legacy_text( $new_instance, 'select_text' ) );
+		$instance['limit'] = empty( $new_instance['limit'] ) ? '' : absint( self::legacy_text( $new_instance, 'limit' ) );
 		$instance['show_post_count'] = ! empty( $new_instance['show_post_count'] ) ? 1 : 0;
-		$instance['post_type'] = sanitize_key( $new_instance['post_type'] ?? 'post' );
-		$type = sanitize_key( $new_instance['type'] ?? 'yearly' );
+		$instance['post_type'] = sanitize_key( self::legacy_text( $new_instance, 'post_type', 'post' ) );
+		$type = sanitize_key( self::legacy_text( $new_instance, 'type', 'yearly' ) );
 		$instance['type'] = in_array( $type, array( 'daily', 'weekly', 'monthly', 'yearly', 'decade', 'alpha', 'postbypost' ), true ) ? $type : 'yearly';
-		$format = sanitize_key( $new_instance['format'] ?? 'html' );
+		$format = sanitize_key( self::legacy_text( $new_instance, 'format', 'html' ) );
 		$instance['format'] = in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
 		foreach ( array( 'order' => 'DESC', 'alpha_order' => 'ASC', 'post_order' => 'DESC' ) as $field => $default ) {
-			$value = strtoupper( (string) ( $new_instance[ $field ] ?? $default ) );
+			$value = strtoupper( self::legacy_text( $new_instance, $field, $default ) );
 			$instance[ $field ] = in_array( $value, array( 'ASC', 'DESC' ), true ) ? $value : $default;
 		}
 		return $instance;
@@ -923,18 +939,19 @@ class ChronoArchive_Widget extends WP_Widget {
 	 * @param array $instance Current settings.
 	 */
 	function form( $instance ) {
-		$title = empty( $instance['title'] ) ? '' : stripslashes( $instance['title'] );
+		$instance = is_array( $instance ) ? $instance : array();
+		$title = self::legacy_text( $instance, 'title' );
 		$show_post_count = empty( $instance['show_post_count'] ) ? 0 : $instance['show_post_count'];
-		$format = empty( $instance['format'] ) ? '' : stripslashes( $instance['format'] );
-		$before = empty( $instance['before'] ) ? '' : stripslashes( $instance['before'] );
-		$after = empty( $instance['after'] ) ? '' : stripslashes( $instance['after'] );
-		$type = empty( $instance['type'] ) ? '' : strip_tags( $instance['type'] );
-		$limit = empty( $instance['limit'] ) ? '' : stripslashes( $instance['limit'] );
-		$post_type = empty( $instance['post_type'] ) ? 'post' : stripslashes( $instance['post_type'] );
-		$order = empty( $instance['order'] ) ? 'DESC' : stripslashes( $instance['order'] );
-		$alpha_order = empty( $instance['alpha_order'] ) ? 'ASC' : stripslashes( $instance['alpha_order'] );
-		$post_order = empty( $instance['post_order'] ) ? 'DESC' : stripslashes( $instance['post_order'] );
-		$select_text = empty( $instance['select_text'] ) ? '' : stripslashes( $instance['select_text'] );
+		$format = self::legacy_text( $instance, 'format' );
+		$before = self::legacy_text( $instance, 'before' );
+		$after = self::legacy_text( $instance, 'after' );
+		$type = strip_tags( self::legacy_text( $instance, 'type' ) );
+		$limit = self::legacy_text( $instance, 'limit' );
+		$post_type = self::legacy_text( $instance, 'post_type', 'post' );
+		$order = self::legacy_text( $instance, 'order', 'DESC' );
+		$alpha_order = self::legacy_text( $instance, 'alpha_order', 'ASC' );
+		$post_order = self::legacy_text( $instance, 'post_order', 'DESC' );
+		$select_text = self::legacy_text( $instance, 'select_text' );
 
 		if ( empty( $show_post_count ) && ! empty( $instance['showcount'] ) ) {
 			$show_post_count = $instance['showcount'];
