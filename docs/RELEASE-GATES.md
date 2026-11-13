@@ -36,3 +36,10 @@
 5. WordPress.org new plugin submission, human review, and SVN publishing **only after approval**.
 
 Always identify whether a check was run or merely planned.
+
+### Ticket #2 intermediate evidence (review branch only)
+
+- [x] Initial review of predecessor CVE summaries and targeted PHP code paths; documented in [SECURITY-REVIEW.md](SECURITY-REVIEW.md).
+- [x] Escaping and malformed-value hardening committed as a separate security branch with contract tests.
+- [ ] Real WordPress regression suite and official Plugin Check run for the patch.
+- [ ] Independent source review and CSS policy decision before marking the security gate complete.
