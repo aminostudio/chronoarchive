@@ -49,3 +49,10 @@ jobs:
           test -f chronoarchive.php || exit 1
           find assets js -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
 
+  metadata-schema:
+    name: Plugin/readme metadata consistency (development)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate metadata schema and i18n domain
+        run: python3 scripts/check-release-metadata.py
