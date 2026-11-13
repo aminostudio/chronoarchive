@@ -12,7 +12,7 @@ Include the affected version, WordPress/PHP environment, minimal reproduction st
 
 ## Upstream security history
 
-The predecessor Annual Archive has documented XSS issues, including `CVE-2023-0178` and `CVE-2024-33598`. Their presence is a reason to inspect the fork's affected code paths. This file **does not assert** the fork is currently vulnerable or fully patched.
+The predecessor Annual Archive has documented XSS issues, including `CVE-2023-0178`, `CVE-2023-49847` and `CVE-2024-33598`. Their presence is a reason to inspect the fork's affected code paths. This file **does not assert** the fork is currently vulnerable or fully patched.
 
 ## Required release reviews
 
