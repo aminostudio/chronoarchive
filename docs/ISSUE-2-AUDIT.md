@@ -46,7 +46,7 @@ The plugin prepares post-type input and limits SQL sort directions, but `getarch
 
 ### Real WordPress / MariaDB 11
 
-`tests/wp-integration.php`: **43/43 assertions successful** on each of PHP 8.2 and PHP 8.4, using freshly installed WordPress **7.1.4** in disposable GitHub Actions environments. [Verified run](https://github.com/aminostudio/chronoarchive/actions/runs/43373859546).
+`tests/wp-integration.php`: **47/47 assertions successful in each environment** in the four-cell WordPress/PHP matrix: WordPress 6.5.5 with PHP 7.2 and 8.2, and WordPress 7.1.4 with PHP 8.2 and 8.4 (188 test assertions). [Verified minimum-version matrix](https://github.com/aminostudio/chronoarchive/actions/runs/43374651359). Subsequent widget output escaping is tested by the same matrix; retain version-specific result links in the PR.
 
 The suite creates 30 synthetic dated posts (1997–2026), inserts the 2019-12-31 / 2020-01-01 boundary cases, and tests:
 
@@ -67,7 +67,15 @@ The first integration test revealed output during `wp plugin activate` from a tr
 
 ### Plugin Check status
 
-An automated [WordPress Plugin Check](https://github.com/WordPress/plugin-check-action) workflow was added to annotate findings and upload results. **Its full findings require manual triage and should not be represented as passing before review.** The separate metadata gate intentionally fails on the old readme/header, tracked in [#3](https://github.com/aminostudio/chronoarchive/issues/3).
+An automated [official WordPress Plugin Check](https://github.com/WordPress/plugin-check-action) workflow now scans this repository, annotates errors and uploads its complete JSON findings. Its **initial scan was red** with **163 findings** across the inherited beta source; after replacing the unsafe legacy settings UI with an escaped WordPress Settings API form, a subsequent scan reported **105 findings**. Recent widget escaping improvements are undergoing a follow-up scan, so 105 is a dated checkpoint, **not** a claim that the current branch has exactly 105 findings.
+
+Triage by category (at the 105-finding checkpoint):
+- **#3, metadata and internationalization:** 48 incorrect text-domain findings, a missing translator comment, readme tags/description warnings and a discouraged translation loading call.
+- **#2, output security:** 18 non-escaped output and 14 unsafe printing warnings/errors (many from the inherited classic widget, which has since been hardened).
+- **#4, database/performance:** six direct SQL warnings, six missing direct prepare hints and six database parameter warnings. The code currently composes a trusted table identifier and allowlisted SQL fragments around a prepared post-type `WHERE` clause; this requires code review and a strict SQL-mode compatibility test rather than blindly suppressing the warnings.
+- **Other:** two `strip_tags()` discouraged findings and one unexpected NOTICE.md in the plugin distribution root.
+
+WordPress.org release metadata gate intentionally fails on the old plugin header/readme, tracked in [#3](https://github.com/aminostudio/chronoarchive/issues/3). **No release permitted while critical findings remain.**
 
 ## 4. Remaining blockers
 
