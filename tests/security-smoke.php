@@ -37,6 +37,7 @@ function get_option( $name, $default = false ) {
 function add_action() {}
 function add_filter() {}
 function add_shortcode() {}
+function plugin_basename( $path ) { return basename( $path ); }
 function __($s) { return $s; }
 function esc_html($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
 function apply_filters( $name, $value ) {
