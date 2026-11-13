@@ -105,6 +105,38 @@ try {
         false !== strpos( $bad_input, '<li>' ) &&
         false === strpos( $bad_input, '<script>' ) );
 
+    // Exercise the settings page with a real WordPress administrator.
+    $prior_user = get_current_user_id();
+    $previous_settings = get_option( 'WP_ChronoArchive_options', false );
+    $admins = get_users( array( 'role' => 'administrator', 'fields' => 'ID', 'number' => 1 ) );
+    try {
+        if ( ! empty( $admins ) ) {
+            wp_set_current_user( (int) $admins[0] );
+            update_option( 'WP_ChronoArchive_options', array(
+                'custom_css' => '</textarea><svg onload=alert(1)>',
+                'use_cpt_archive' => '1',
+            ) );
+            $admin_plugin = ( new ReflectionClass( 'WP_Plugin_ChronoArchive' ) )->newInstanceWithoutConstructor();
+            ob_start();
+            $admin_plugin->options_page();
+            $admin_html = ob_get_clean();
+            $check( 'Real administrator settings prevent injected textarea markup',
+                false !== strpos( $admin_html, '&lt;/textarea&gt;' ) &&
+                false === strpos( $admin_html, '<svg' ) &&
+                false !== strpos( $admin_html, '[custom_css]' ) &&
+                false !== strpos( $admin_html, '[use_cpt_archive]' ) );
+        } else {
+            $check( 'Administrator test user is available', false );
+        }
+    } finally {
+        if ( false === $previous_settings ) {
+            delete_option( 'WP_ChronoArchive_options' );
+        } else {
+            update_option( 'WP_ChronoArchive_options', $previous_settings );
+        }
+        wp_set_current_user( $prior_user );
+    }
+
     $widget = new ChronoArchive_Widget();
     $safe_widget = $widget->update( array( 'title' => array( '<svg>' ),
         'before' => array( '<img>' ), 'type' => array( 'daily' ) ), array() );
