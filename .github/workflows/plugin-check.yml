@@ -1,0 +1,25 @@
+name: WordPress Plugin Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  plugin-check:
+    name: Official Plugin Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Plugin Check runs its own isolated WordPress wp-env installation.
+      # Findings remain blocking until triaged, without suppressing errors.
+      - name: Run official WordPress Plugin Check
+        uses: wordpress/plugin-check-action@v1
+        with:
+          build-dir: './'
+          slug: chronoarchive
+          exclude-directories: 'tests,docs,scripts,.github'
+          exclude-files: '.gitignore,.gitattributes,.github/workflows/wordpress-integration.yml,.github/workflows/static-checks.yml'
