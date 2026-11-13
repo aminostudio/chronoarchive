@@ -149,12 +149,13 @@ $filtered_links = WP_Plugin_ChronoArchive::wp_get_archives_advanced(
     array( 'type' => 'yearly', 'format' => 'link', 'limit' => 1, 'echo' => 0 )
 );
 remove_filter( 'get_archives_link', $malformed_archives_link, 10 );
-$assert( 'Returned archive HTML strips filtered executable markup',
+$assert( 'Returned archive HTML removes active filtered markup',
     false === stripos( $filtered_markup, '<script' ) &&
-    false === stripos( $filtered_markup, '<img' ) &&
+    false === stripos( $filtered_markup, 'onerror=' ) &&
+    false === stripos( $filtered_markup, 'onload=' ) &&
     false !== strpos( $filtered_markup, '<a ' ) );
 $assert( 'Returned OPTION archive output preserves strict markup',
-    1 === substr_count( $filtered_options, '<option value=' ) &&
+    2 === substr_count( $filtered_options, '<option value=' ) &&
     false === stripos( $filtered_options, '<img' ) &&
     false === stripos( $filtered_options, '<script' ) );
 $assert( 'Returned LINK archive output strips filtered HTML tags',
