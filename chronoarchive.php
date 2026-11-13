@@ -115,6 +115,10 @@ class WP_Plugin_ChronoArchive {
 		// ?m=YYYY&w=NN, this correctly handles weeks crossing a year boundary.
 		$week = $query->get( 'chrono_week' );
 		if ( null !== $week && '' !== $week ) {
+			// A week selector must never rewrite the homepage, search or a single post.
+			if ( ! $query->is_archive() ) {
+				return;
+			}
 			$week = is_string( $week ) ? $week : '';
 			$start = preg_match( '/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/', $week )
 				? DateTimeImmutable::createFromFormat( '!Y-m-d', $week, wp_timezone() ) : false;
@@ -139,7 +143,11 @@ class WP_Plugin_ChronoArchive {
 		if ( $query->is_archive() ) {
 			$decade = $query->get( 'decade' );
 			$decade = is_scalar( $decade ) ? (string) $decade : '';
-			if ( preg_match( '/^[1-9][0-9]{3}$/', $decade ) && 0 === ( (int) $decade % 10 ) ) {
+			if ( '' !== $decade && ( ! preg_match( '/^[1-9][0-9]{3}$/D', $decade ) || 0 !== ( (int) $decade % 10 ) ) ) {
+				$query->set( 'post__in', array( 0 ) );
+				return;
+			}
+			if ( '' !== $decade ) {
 				$start = $decade . '-01-01';
 				$end   = ( $decade + 9 ) . '-12-31';
 				$query->set( 'year', '' );
@@ -269,9 +277,21 @@ class WP_Plugin_ChronoArchive {
 
 		$r = wp_parse_args( $args, $defaults );
 
+		// Validate direct API and legacy-widget calls, which skip shortcode_atts().
+		$type = is_string( $r['type'] ) ? sanitize_key( $r['type'] ) : '';
+		$r['type'] = in_array( $type, array( 'daily', 'weekly', 'monthly', 'yearly', 'decade', 'alpha', 'postbypost' ), true ) ? $type : 'yearly';
+		$format = is_string( $r['format'] ) ? sanitize_key( $r['format'] ) : '';
+		$r['format'] = in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
+		$r['before'] = wp_kses_post( is_scalar( $r['before'] ) ? (string) $r['before'] : '' );
+		$r['after'] = wp_kses_post( is_scalar( $r['after'] ) ? (string) $r['after'] : '' );
+		$r['alpha_order'] = 'DESC' === strtoupper( is_string( $r['alpha_order'] ) ? $r['alpha_order'] : '' ) ? 'DESC' : 'ASC';
+		$r['post_order'] = 'ASC' === strtoupper( is_string( $r['post_order'] ) ? $r['post_order'] : '' ) ? 'ASC' : 'DESC';
+		$r['limit'] = is_scalar( $r['limit'] ) ? $r['limit'] : '';
+		$r['post_type'] = is_string( $r['post_type'] ) ? sanitize_key( $r['post_type'] ) : '';
+
 		$post_type_object = get_post_type_object( $r['post_type'] );
 		if ( ! is_post_type_viewable( $post_type_object ) ) {
-			return;
+			return '';
 		}
 		$r['post_type'] = $post_type_object->name;
 
@@ -756,7 +776,13 @@ class ChronoArchive_Widget extends WP_Widget {
 	 * @param array $instance Instance settings.
 	 */
 	function widget( $args, $instance ) {
-		extract( $args );
+		// Explicitly read only trusted WordPress theme wrappers. Never extract()
+		// arbitrary keys into local variables, where they could overwrite state.
+		$before_widget = isset( $args['before_widget'] ) && is_string( $args['before_widget'] ) ? $args['before_widget'] : '';
+		$after_widget  = isset( $args['after_widget'] ) && is_string( $args['after_widget'] ) ? $args['after_widget'] : '';
+		$before_title  = isset( $args['before_title'] ) && is_string( $args['before_title'] ) ? $args['before_title'] : '';
+		$after_title   = isset( $args['after_title'] ) && is_string( $args['after_title'] ) ? $args['after_title'] : '';
+		$instance = is_array( $instance ) ? $instance : array();
 
 		$format         = empty( $instance['format'] ) ? 'html' : apply_filters( 'widget_format', $instance['format'] );
 		$type           = empty( $instance['type'] ) ? 'yearly' : apply_filters( 'widget_type', $instance['type'] );
@@ -769,6 +795,7 @@ class ChronoArchive_Widget extends WP_Widget {
 		$alpha_order    = empty( $instance['alpha_order'] ) ? 'ASC' : apply_filters( 'widget_alpha_order', $instance['alpha_order'] );
 		$post_order     = empty( $instance['post_order'] ) ? 'DESC' : apply_filters( 'widget_post_order', $instance['post_order'] );
 		$select_text    = empty( $instance['select_text'] ) ? '' : apply_filters( 'widget_slelect_text', $instance['select_text'] );
+		$select_text    = is_scalar( $select_text ) ? sanitize_text_field( (string) $select_text ) : '';
 		$post_type      = empty( $instance['post_type'] ) ? 'post' : apply_filters( 'widget_post_type', $instance['post_type'] );
 
 		if ( empty( $show_post_count ) && ! empty( $instance['showcount'] ) ) {
@@ -776,8 +803,8 @@ class ChronoArchive_Widget extends WP_Widget {
 		}
 
 		echo $before_widget;
-		if ( $title ) {
-			echo $before_title . esc_html( $title ) . $after_title;
+		if ( is_scalar( $title ) && '' !== (string) $title ) {
+			echo $before_title . esc_html( (string) $title ) . $after_title;
 		}
 
 		if ( $format == 'option' ) {
