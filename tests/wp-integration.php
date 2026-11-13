@@ -153,6 +153,8 @@ $widget->widget( array( 'before_widget' => '<aside>', 'after_widget' => '</aside
     array( 'type' => 'yearly', 'limit' => 2 ) );
 $widget_output = ob_get_clean();
 $assert( 'Classic widget renders archive links', false !== strpos( $widget_output, '<a ' ) );
+$assert( 'Trusted widget theme wrappers are preserved', false !== strpos( $widget_output, '<aside>' ) &&
+    false !== strpos( $widget_output, '</aside>' ) );
 
 // Render administrator settings with a malicious historic textarea value.
 // WordPress esc_textarea() must keep the payload inside the textarea.
