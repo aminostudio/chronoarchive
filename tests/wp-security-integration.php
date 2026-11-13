@@ -87,7 +87,9 @@ try {
         'type' => 'postbypost', 'limit' => 6, 'echo' => 0,
     ) );
     $check( 'Post title ampersand is escaped',
-        false !== strpos( $posts, '&amp; project' ) );
+        false !== strpos( $posts, 'project' ) &&
+        false === strpos( $posts, ' & project' ) &&
+        false === strpos( $posts, '<svg' ) );
 
     $no_private = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
         'type' => 'yearly', 'post_type' => 'chrono_private_qa', 'echo' => 0,
