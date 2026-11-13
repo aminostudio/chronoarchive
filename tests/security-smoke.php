@@ -61,6 +61,11 @@ function esc_html($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'
 function esc_attr($s) { return esc_html( $s ); }
 function esc_html_e($s) { echo esc_html( $s ); }
 function _e($s) { echo esc_html( $s ); }
+function selected( $a, $b, $echo = true ) {
+    $text = (string) $a === (string) $b ? ' selected="selected"' : '';
+    if ( $echo ) { echo $text; }
+    return $text;
+}
 function checked( $a, $b, $echo = true ) {
     $text = (string) $a === (string) $b ? ' checked="checked"' : '';
     if ( $echo ) { echo $text; }
@@ -81,7 +86,7 @@ function sanitize_key( $key ) {
 }
 function wp_kses_post( $text ) {
     $text = preg_replace( '/\s+on[a-z]+\s*=\s*("[^"]*"|\x27[^\x27]*\x27|[^\s>]+)/i', '', (string) $text );
-    return strip_tags( $text, '<span><strong><em><a>' );
+    return strip_tags( $text, '<span><strong><em><a><aside><section><div><h2>' );
 }
 function get_post_type_object( $name ) {
     return 'post' === $name ? (object) array( 'name' => 'post' ) : null;
