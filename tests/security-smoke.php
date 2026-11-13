@@ -15,6 +15,8 @@ $GLOBALS['ca_fake_query'] = '';
 class WP_Widget {
     public $id_base = 'chronoarchive_widget';
     public function __construct() {}
+    public function get_field_id( $name ) { return 'ca-test-' . $name; }
+    public function get_field_name( $name ) { return 'widget-chronoarchive[' . $name . ']'; }
 }
 class CA_Fake_Query {
     public $values = array();
@@ -56,6 +58,20 @@ function add_shortcode() {}
 function plugin_basename( $path ) { return basename( $path ); }
 function __($s) { return $s; }
 function esc_html($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
+function esc_attr($s) { return esc_html( $s ); }
+function esc_html_e($s) { echo esc_html( $s ); }
+function _e($s) { echo esc_html( $s ); }
+function checked( $a, $b, $echo = true ) {
+    $text = (string) $a === (string) $b ? ' checked="checked"' : '';
+    if ( $echo ) { echo $text; }
+    return $text;
+}
+function get_post_types( $args ) { return array( 'post' ); }
+function wp_strip_all_tags( $html ) { return strip_tags( (string) $html ); }
+function wp_unslash( $text ) { return stripslashes( $text ); }
+function wp_register_style( $handle, $src, $deps, $version ) { $GLOBALS['ca_styles']['registered'][] = $handle; }
+function wp_enqueue_style( $handle ) { $GLOBALS['ca_styles']['enqueued'][] = $handle; }
+function wp_add_inline_style( $handle, $css ) { $GLOBALS['ca_styles']['css'][] = $css; }
 function apply_filters( $name, $value ) {
     return isset( $GLOBALS['ca_mock_filters'][ $name ] ) ? $GLOBALS['ca_mock_filters'][ $name ] : $value;
 }
@@ -143,6 +159,59 @@ $bad_decade = new CA_Fake_Query( array( 'decade' => '2025' ), true );
 $WP_Plugin_ChronoArchive->ChronoArchive_decade_filter( $bad_decade );
 ca_assert( 'Invalid decade fails closed', isset( $bad_decade->values['post__in'] ) &&
     array( 0 ) === $bad_decade->values['post__in'] );
+
+// Admin CSS comes from both sanitized and historical untrusted options.
+ca_assert( 'CSS helper ignores invalid stored types', '' === WP_Plugin_ChronoArchive::safe_custom_css( array( '</style>' ) ) );
+$bad_css = '.test { color: red; } </style><script>alert(1)</script>';
+$safe_css = WP_Plugin_ChronoArchive::safe_custom_css( $bad_css );
+ca_assert( 'CSS cannot close an HTML style tag', false === stripos( $safe_css, '</style' ) );
+ca_assert( 'CSS cannot emit a raw opening HTML tag', false === strpos( $safe_css, '<' ) );
+
+$GLOBALS['ca_mock_options']['WP_ChronoArchive_options'] = array(
+    'custom_css' => array( 'malformed' ),
+    'use_cpt_archive' => array( 'malformed' ),
+);
+$WP_Plugin_ChronoArchive->_set_options();
+ca_assert( 'Malformed legacy option ignored', '' === $WP_Plugin_ChronoArchive->options['custom_css'] );
+$GLOBALS['ca_styles'] = array( 'registered' => array(), 'enqueued' => array(), 'css' => array() );
+$WP_Plugin_ChronoArchive->plugin_enqueue_styles();
+ca_assert( 'Malformed CSS enqueues no styles', empty( $GLOBALS['ca_styles']['css'] ) );
+
+$GLOBALS['ca_mock_options']['WP_ChronoArchive_options'] = array(
+    'custom_css' => '.example{color:purple} </style><script>x</script>',
+    'use_cpt_archive' => '1',
+);
+$WP_Plugin_ChronoArchive->_set_options();
+$WP_Plugin_ChronoArchive->plugin_enqueue_styles();
+ca_assert( 'Valid legacy CSS uses WP Styles API', count( $GLOBALS['ca_styles']['css'] ) === 1 );
+ca_assert( 'Legacy CSS output contains no HTML tag', false === strpos( $GLOBALS['ca_styles']['css'][0], '<' ) );
+
+$broken = array(
+    'title' => array( 'invalid' ),
+    'type' => array( 'invalid' ),
+    'format' => array( 'invalid' ),
+    'order' => array( 'invalid' ),
+    'post_type' => array( 'invalid' ),
+    'before' => array( 'invalid' ),
+    'select_text' => array( 'invalid' ),
+);
+$saved = $widget->update( $broken, array() );
+ca_assert( 'Widget update refuses invalid array title', '' === $saved['title'] );
+ca_assert( 'Widget update defaults invalid archive type', 'yearly' === $saved['type'] );
+ca_assert( 'Widget update defaults invalid format', 'html' === $saved['format'] );
+ca_assert( 'Widget update keeps scalar-safe order', 'DESC' === $saved['order'] );
+ob_start();
+$widget->form( $broken );
+$widget_form_html = ob_get_clean();
+ca_assert( 'Legacy widget form renders without fatal errors', false !== strpos( $widget_form_html, 'widget-chronoarchive' ) );
+ca_assert( 'Widget form does not render array marker', false === strpos( $widget_form_html, 'Array' ) );
+
+$GLOBALS['ca_mock_filters']['widget_before'] = array( 'malformed' );
+ob_start();
+$widget->widget( array( 'before_widget' => '<aside>' ), array( 'type' => 'yearly', 'before' => '<em>Test</em>' ) );
+$filtered_widget_html = ob_get_clean();
+ca_assert( 'Malformed wrapper filter is ignored', false === strpos( $filtered_widget_html, 'Array' ) && false !== strpos( $filtered_widget_html, '2026' ) );
+unset( $GLOBALS['ca_mock_filters']['widget_before'] );
 
 echo "\nMock security checks: {$passes} passed, {$fails} failed.\n";
 exit( $fails ? 1 : 0 );
