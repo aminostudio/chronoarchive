@@ -1,0 +1,1014 @@
+<?php
+/*
+Plugin Name: ChronoArchive
+Plugin URI: https://aminostudio.fr/ChronoArchive
+Description: Display daily, weekly, monthly, yearly, decade, post-by-post and alpha archives with a simple shortcode or sidebar widget. Forked from Annual Archive by Twinpictures.
+Version: 2.1.0-beta1
+Author: Amino Studio
+Author URI: https://aminostudio.fr
+Based on: Annual Archive by Twinpictures (https://www.twinpictures.de/)
+License: GPL2
+*/
+
+/**
+ * Class WP_Plugin_ChronoArchive
+ *
+ * This plugin is a fork of Annual Archive by Twinpictures.
+ * It displays various archive lists via shortcode or widget.
+ */
+class WP_Plugin_ChronoArchive {
+
+	/**
+	 * Plugin variables.
+	 *
+	 * @var string
+	 */
+	var $plugin_name = 'ChronoArchive';
+	var $version = '2.1.0-beta1';
+	// Domain for plugin settings.
+	var $domain = 'ChronoArchive';
+
+	/**
+	 * Options page information.
+	 *
+	 * @var string
+	 */
+	var $plugin_options_page_title = 'ChronoArchive Options';
+	var $plugin_options_menu_title = 'ChronoArchive';
+	var $plugin_options_slug = 'ChronoArchive-options';
+
+	/**
+	 * Option name in the database.
+	 *
+	 * @var string
+	 */
+	var $options_name = 'WP_ChronoArchive_options';
+
+	/**
+	 * Plugin options.
+	 *
+	 * @var array
+	 */
+	var $options = array(
+		'custom_css' => '',
+		'use_cpt_archive' => '',
+	);
+
+	/**
+	 * Constructor.
+	 */
+	function __construct() {
+		// Set option values.
+		$this->_set_options();
+
+		// Add actions.
+		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
+		add_action( 'plugin_action_links_' . plugin_basename(__FILE__), array( $this, 'plugin_actions' ) );
+		add_action( 'admin_init', array( $this, 'admin_init' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'archive_admin_js_scripts' ) );
+		add_action( 'wp_head', array( $this, 'plugin_head_inject' ) );
+		add_action( 'plugins_loaded', array( $this, 'ChronoArchive_load_textdomain' ) );
+
+		// Register shortcodes.
+		add_shortcode('archives', array($this, 'shortcode'));
+		add_shortcode('arcpromat', array($this, 'shortcode'));
+		add_shortcode('chronoarchive', array($this, 'shortcode'));
+
+		// Add filters.
+		add_filter( 'widget_text', 'do_shortcode' );
+		add_filter( 'query_vars', array($this, 'ChronoArchive_query_vars') );
+		add_filter( 'pre_get_posts', array($this, 'ChronoArchive_decade_filter') );
+		add_filter( 'get_the_archive_title', array($this, 'ChronoArchive_decade_title') );
+	}
+
+	/**
+	 * Load text domain for translations.
+	 */
+	function ChronoArchive_load_textdomain() {
+	    load_plugin_textdomain( 'ChronoArchive' );
+	}
+
+	/**
+	 * Add decade query variable.
+	 *
+	 * @param array $vars Existing query vars.
+	 * @return array Modified query vars.
+	 */
+	function ChronoArchive_query_vars($vars) {
+		$vars[] = 'decade';
+		$vars[] = 'chrono_week';
+		return $vars;
+	}
+
+	/**
+	 * Check for decade query var and modify the main query.
+	 *
+	 * @param WP_Query $query The main query.
+	 */
+	function ChronoArchive_decade_filter( $query ) {
+		// Never alter admin queries or secondary loops.
+		if ( is_admin() || ! $query->is_main_query() ) {
+			return;
+		}
+
+		// Group by the actual beginning of a calendar week. Unlike ?w=0 and
+		// ?m=YYYY&w=NN, this correctly handles weeks crossing a year boundary.
+		$week = $query->get( 'chrono_week' );
+		if ( null !== $week && '' !== $week ) {
+			$week = is_string( $week ) ? $week : '';
+			$start = preg_match( '/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/', $week )
+				? DateTimeImmutable::createFromFormat( '!Y-m-d', $week, wp_timezone() ) : false;
+			if ( ! $start || $start->format( 'Y-m-d' ) !== $week ||
+				(int) $start->format( 'w' ) !== (int) get_option( 'start_of_week', 1 ) ) {
+				// Invalid archive dates must not silently expose the complete post list.
+				$query->set( 'post__in', array( 0 ) );
+				return;
+			}
+			$query->set( 'year', '' ); // Weekly ranges can span two calendar years.
+			$query->set( 'date_query', array(
+				array(
+					'after'     => $week,
+					'before'    => $start->modify( '+6 days' )->format( 'Y-m-d' ),
+					'inclusive' => true,
+				),
+			) );
+			$query->set( 'ignore_sticky_posts', true );
+			return;
+		}
+
+		if ( $query->is_archive() ) {
+			$decade = $query->get( 'decade' );
+			$decade = is_scalar( $decade ) ? (string) $decade : '';
+			if ( preg_match( '/^[1-9][0-9]{3}$/', $decade ) && 0 === ( (int) $decade % 10 ) ) {
+				$start = $decade . '-01-01';
+				$end   = ( $decade + 9 ) . '-12-31';
+				$query->set( 'year', '' );
+				$query->set( 'date_query', array(
+					array( 'after' => $start, 'before' => $end, 'inclusive' => true ),
+				) );
+			}
+		}
+	}
+
+	/**
+	 * Modify the archive title when using the decade filter.
+	 *
+	 * @param string $title The original title.
+	 * @return string Modified title.
+	 */
+	function ChronoArchive_decade_title( $title ) {
+		$week = get_query_var( 'chrono_week' );
+		if ( is_string( $week ) && preg_match( '/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/', $week ) ) {
+			$start = DateTimeImmutable::createFromFormat( '!Y-m-d', $week, wp_timezone() );
+			if ( $start && $start->format( 'Y-m-d' ) === $week ) {
+				$end = $start->modify( '+6 days' );
+				return wp_date( get_option( 'date_format' ), $start->getTimestamp() ) . ' – ' . wp_date( get_option( 'date_format' ), $end->getTimestamp() );
+			}
+		}
+		$decade = get_query_var( 'decade' );
+		$decade = is_scalar( $decade ) ? (string) $decade : '';
+		if ( preg_match( '/^[1-9][0-9]{3}$/', $decade ) && 0 === ( (int) $decade % 10 ) ) {
+			$title = sprintf( '%d–%d', (int) $decade, (int) $decade + 9 );
+		}
+		return $title;
+	}
+
+	/**
+	 * Inject custom CSS into the head.
+	 *
+	 * The CSS is escaped to prevent code injection.
+	 */
+	function plugin_head_inject(){
+		if ( ! empty( $this->options['custom_css'] ) ) {
+			echo "\n<style>\n" . esc_html( $this->options['custom_css'] ) . "\n</style>\n";
+		}
+	}
+
+	/**
+	 * Add options page to the admin menu.
+	 */
+	function admin_menu() {
+		if ( function_exists( 'add_options_page' ) && current_user_can( 'manage_options' ) ) {
+			add_options_page(
+				$this->plugin_options_page_title,
+				$this->plugin_options_menu_title,
+				'manage_options',
+				$this->plugin_options_slug,
+				array( $this, 'options_page' )
+			);
+		}
+	}
+
+	/**
+	 * Register plugin settings.
+	 */
+	function admin_init() {
+		register_setting(
+			$this->domain,
+			$this->options_name,
+			array( 'sanitize_callback' => array( $this, 'sanitize_settings' ) )
+		);
+	}
+
+	/**
+	 * Validate settings before saving. Existing stored values are not migrated.
+	 *
+	 * @param mixed $input Form submission.
+	 * @return array<string, string>
+	 */
+	function sanitize_settings( $input ) {
+		$input = is_array( $input ) ? $input : array();
+		$css = isset( $input['custom_css'] ) && is_string( $input['custom_css'] )
+			? wp_strip_all_tags( wp_unslash( $input['custom_css'] ) ) : '';
+		return array(
+			'custom_css' => $css,
+			'use_cpt_archive' => ! empty( $input['use_cpt_archive'] ) ? '1' : '',
+		);
+	}
+
+	/**
+	 * Load widget admin JavaScript.
+	 *
+	 * @param string $hook Current admin page.
+	 */
+	function archive_admin_js_scripts( $hook ) {
+		global $pagenow;
+		if ( $hook == 'widgets.php' && $pagenow != 'customize.php' ) {
+			$plugin_url = plugins_url() . '/' . dirname( plugin_basename(__FILE__) );
+			wp_register_script( 'archive-admin-script', $plugin_url . '/js/widget_form.js', array( 'jquery' ), '0.2', true );
+			wp_enqueue_script( 'archive-admin-script' );
+		}
+	}
+
+	/**
+	 * Advanced wp_get_archives.
+	 *
+	 * Adds ordering and decade filtering capabilities.
+	 *
+	 * @param array|string $args Arguments for retrieving archives.
+	 * @return void|string Archive links output or return.
+	 */
+	static function wp_get_archives_advanced( $args = '' ) {
+		global $wpdb, $wp_locale;
+
+		$defaults = array(
+			'type'            => 'yearly',
+			'limit'           => '',
+			'format'          => 'html',
+			'before'          => '',
+			'after'           => '',
+			'show_post_count' => false,
+			'showcount'       => false,
+			'echo'            => 1,
+			'order'           => 'DESC',
+			'alpha_order'     => 'ASC',
+			'post_order'      => 'DESC',
+			'post_type'       => 'post',
+			'use_cpt_archive' => '',
+		);
+
+		$r = wp_parse_args( $args, $defaults );
+
+		$post_type_object = get_post_type_object( $r['post_type'] );
+		if ( ! is_post_type_viewable( $post_type_object ) ) {
+			return;
+		}
+		$r['post_type'] = $post_type_object->name;
+
+		if ( '' == $r['type'] ) {
+			$r['type'] = 'yearly';
+		}
+
+		if ( ! empty( $r['limit'] ) ) {
+			$r['limit'] = absint( $r['limit'] );
+			$r['limit'] = ' LIMIT ' . $r['limit'];
+		}
+
+		$order = strtoupper( $r['order'] );
+		if ( $order !== 'ASC' ) {
+			$order = 'DESC';
+		}
+
+		if ( empty( $r['show_post_count'] ) && ! empty( $r['showcount'] ) ) {
+			$r['show_post_count'] = $r['showcount'];
+		}
+
+		// Separator for weekly archives.
+		$archive_week_separator = '&#8211;';
+
+		$sql_where = $wpdb->prepare( "WHERE post_type = %s AND post_status = 'publish'", $r['post_type'] );
+
+		$where = apply_filters( 'getarchives_where', $sql_where, $r );
+		$join  = apply_filters( 'getarchives_join', '', $r );
+
+		$output = '';
+
+		$last_changed = wp_cache_get_last_changed( 'posts' );
+		$limit = $r['limit'];
+
+		// Monthly archives.
+        // Using a direct query here is necessary for efficient archive grouping.
+        // The query is prepared and cached for security and performance.
+		if ( 'monthly' == $r['type'] ) {
+			$query = "SELECT YEAR(post_date) AS `year`, MONTH(post_date) AS `month`, count(ID) as posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date), MONTH(post_date) ORDER BY post_date $order $limit";
+			$key   = md5( $query );
+			$key   = "wp_get_archives_advanced:$key:$last_changed";
+			if ( ! $results = wp_cache_get( $key, 'posts' ) ) {
+				$results = $wpdb->get_results( $query );
+				wp_cache_set( $key, $results, 'posts' );
+			}
+			if ( $results ) {
+				$after = $r['after'];
+				foreach ( (array) $results as $result ) {
+					$url = get_month_link( $result->year, $result->month );
+					if ( 'post' !== $r['post_type'] ) {
+						if ( ! empty( $r['use_cpt_archive'] ) ) {
+							$base = get_post_type_archive_link( $r['post_type'] );
+							if ( $base ) {
+								$url = add_query_arg( array(
+									'year'     => $result->year,
+									'monthnum' => $result->month,
+								), $base );
+							} else {
+								$url = add_query_arg( 'post_type', $r['post_type'], $url );
+							}
+						} else {
+							$url = add_query_arg( 'post_type', $r['post_type'], $url );
+						}
+					}
+					$text = sprintf( __( '%1$s %2$d', 'ChronoArchive' ), $wp_locale->get_month( $result->month ), $result->year );
+					if ( $r['show_post_count'] ) {
+						$r['after'] = '&nbsp;(' . $result->posts . ')' . $after;
+					}
+					$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
+				}
+			}
+		// Yearly archives.
+        // Using a direct query here is necessary for efficient archive grouping.
+        // The query is prepared and cached for security and performance.
+		} elseif ( 'yearly' == $r['type'] ) {
+			$query = "SELECT YEAR(post_date) AS `year`, count(ID) as posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date) ORDER BY post_date $order $limit";
+			$key   = md5( $query );
+			$key   = "wp_get_archives_advanced:$key:$last_changed";
+			if ( ! $results = wp_cache_get( $key, 'posts' ) ) {
+				$results = $wpdb->get_results( $query );
+				wp_cache_set( $key, $results, 'posts' );
+			}
+			if ( $results ) {
+				$after = $r['after'];
+				foreach ( (array) $results as $result ) {
+					$url = get_year_link( $result->year );
+					if ( 'post' !== $r['post_type'] ) {
+						if ( ! empty( $r['use_cpt_archive'] ) ) {
+							$base = get_post_type_archive_link( $r['post_type'] );
+							if ( $base ) {
+								$url = add_query_arg( 'year', $result->year, $base );
+							} else {
+								$url = add_query_arg( 'post_type', $r['post_type'], $url );
+							}
+						} else {
+							$url = add_query_arg( 'post_type', $r['post_type'], $url );
+						}
+					}
+					$text = sprintf( '%d', $result->year );
+					if ( $r['show_post_count'] ) {
+						$r['after'] = '&nbsp;(' . $result->posts . ')' . $after;
+					}
+					$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
+				}
+			}
+		// Daily archives.
+        // Using a direct query here is necessary for efficient archive grouping.
+        // The query is prepared and cached for security and performance.
+		} elseif ( 'daily' == $r['type'] ) {
+			$query = "SELECT YEAR(post_date) AS `year`, MONTH(post_date) AS `month`, DAYOFMONTH(post_date) AS `dayofmonth`, count(ID) as posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date), MONTH(post_date), DAYOFMONTH(post_date) ORDER BY post_date $order $limit";
+			$key   = md5( $query );
+			$key   = "wp_get_archives_advanced:$key:$last_changed";
+			if ( ! $results = wp_cache_get( $key, 'posts' ) ) {
+				$results = $wpdb->get_results( $query );
+				wp_cache_set( $key, $results, 'posts' );
+			}
+			if ( $results ) {
+				$after = $r['after'];
+				foreach ( (array) $results as $result ) {
+					$url = get_day_link( $result->year, $result->month, $result->dayofmonth );
+					if ( 'post' !== $r['post_type'] ) {
+						$url = add_query_arg( 'post_type', $r['post_type'], $url );
+					}
+					$date = sprintf( '%1$d-%2$02d-%3$02d 00:00:00', $result->year, $result->month, $result->dayofmonth );
+					$text = mysql2date( get_option( 'date_format' ), $date );
+					if ( $r['show_post_count'] ) {
+						$r['after'] = '&nbsp;(' . $result->posts . ')' . $after;
+					}
+					$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
+				}
+			}
+		// Weekly archives.
+        // Using a direct query here is necessary for efficient archive grouping.
+        // The query is prepared and cached for security and performance.
+		} elseif ( 'weekly' == $r['type'] ) {
+			// start_of_week is a validated WordPress option (0=Sunday ... 6=Saturday).
+			$start_day = (int) get_option( 'start_of_week', 1 );
+			$week_start_sql = "DATE_SUB(DATE(post_date), INTERVAL MOD(DAYOFWEEK(post_date) - 1 - $start_day + 7, 7) DAY)";
+			$query = "SELECT DATE_FORMAT($week_start_sql, '%Y-%m-%d') AS week_start, COUNT(ID) AS posts FROM $wpdb->posts $join $where GROUP BY week_start ORDER BY week_start $order $limit";
+			$key   = md5( $query );
+			$key   = "wp_get_archives_advanced:$key:$last_changed";
+			$results = wp_cache_get( $key, 'posts' );
+			if ( false === $results ) {
+				$results = $wpdb->get_results( $query );
+				wp_cache_set( $key, $results, 'posts' );
+			}
+			if ( $results ) {
+				$after = $r['after'];
+				foreach ( (array) $results as $result ) {
+					$range = get_weekstartend( $result->week_start, $start_day );
+					$start_label = date_i18n( get_option( 'date_format' ), $range['start'] );
+					$end_label   = date_i18n( get_option( 'date_format' ), $range['end'] );
+					$args = array( 'chrono_week' => $result->week_start );
+					if ( 'post' !== $r['post_type'] ) {
+						$args['post_type'] = $r['post_type'];
+					}
+					$url  = add_query_arg( $args, get_year_link( (int) substr( $result->week_start, 0, 4 ) ) );
+					$text = $start_label . $archive_week_separator . $end_label;
+					$r['after'] = $r['show_post_count'] ? '&nbsp;(' . (int) $result->posts . ')' . $after : $after;
+					$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
+				}
+			}
+		// Decade archives.
+        // Using a direct query here is necessary for efficient archive grouping.
+        // The query is prepared and cached for security and performance.
+		} elseif ( 'decade' == $r['type'] ) {
+			$query = "SELECT COUNT(*) AS posts, decade, decade + 9 AS end_year FROM (SELECT FLOOR(YEAR(post_date) / 10) * 10 AS decade FROM $wpdb->posts $join $where) t GROUP BY decade ORDER BY decade $order $limit";
+			$key   = md5( $query );
+			$key   = "wp_get_archives_advanced:$key:$last_changed";
+			if ( ! $results = wp_cache_get( $key, 'posts' ) ) {
+				$results = $wpdb->get_results( $query );
+				wp_cache_set( $key, $results, 'posts' );
+			}
+			if ( $results ) {
+				$after = $r['after'];
+				foreach ( (array) $results as $result ) {
+					$url = add_query_arg( 'decade', absint( $result->decade ), get_year_link( absint( $result->decade ) ) );
+					if ( 'post' !== $r['post_type'] ) {
+						$url = add_query_arg( 'post_type', $r['post_type'], $url );
+					}
+					$text = sprintf( '%d–%d', (int) $result->decade, (int) $result->end_year );
+					if ( $r['show_post_count'] ) {
+						$r['after'] = '&nbsp;(' . $result->posts . ')' . $after;
+					}
+					$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
+				}
+			}
+		// Post-by-post or Alpha archives.
+		} elseif ( 'postbypost' == $r['type'] || 'alpha' == $r['type'] ) {
+			$alpha_order = strtoupper( $r['alpha_order'] );
+			if ( $alpha_order !== 'ASC' ) {
+				$alpha_order = 'DESC';
+			}
+			$post_order = strtoupper( $r['post_order'] );
+			if ( $post_order !== 'DESC' ) {
+				$post_order = 'ASC';
+			}
+			$orderby = ( 'alpha' == $r['type'] ) ? 'post_title ' . $alpha_order : 'post_date ' . $post_order . ', ID DESC';
+			$query   = "SELECT ID, post_title, post_date FROM $wpdb->posts $join $where ORDER BY $orderby $limit";
+			$key     = md5( $query );
+			$key     = "wp_get_archives_advanced:$key:$last_changed";
+			if ( ! $results = wp_cache_get( $key, 'posts' ) ) {
+				$results = $wpdb->get_results( $query );
+				wp_cache_set( $key, $results, 'posts' );
+			}
+			if ( $results ) {
+				foreach ( (array) $results as $result ) {
+					if ( $result->post_date != '0000-00-00 00:00:00' ) {
+						$url = get_permalink( (int) $result->ID );
+						$text = $result->post_title ? strip_tags( apply_filters( 'the_title', $result->post_title, $result->ID ) ) : $result->ID;
+						$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
+					}
+				}
+			}
+		}
+		if ( $r['echo'] ) {
+			echo $output;
+		} else {
+			return $output;
+		}
+	}
+
+	/**
+	 * Shortcode callback.
+	 *
+	 * Sanitizes and assigns shortcode attributes.
+	 *
+	 * @param array  $atts Shortcode attributes.
+	 * @param string $content Content between shortcode tags.
+	 * @return string Archive output.
+	 */
+	function shortcode( $atts, $content = null ) {
+		$defaults = array(
+			'type'            => 'yearly',
+			'limit'           => '',
+			'format'          => 'html', // html, option, link
+			'before'          => '',
+			'after'           => '',
+			'show_post_count' => '0',
+			'showcount'       => '0',
+			'tag'             => 'ul',
+			'order'           => 'DESC',
+			'alpha_order'     => 'ASC',
+			'post_order'      => 'DESC',
+			'select_text'     => '',
+			'post_type'       => 'post',
+			'use_cpt_archive' => $this->options['use_cpt_archive']
+		);
+		$atts = shortcode_atts( $defaults, $atts, 'archives' );
+
+		$type            = sanitize_key( $atts['type'] );
+		$type            = in_array( $type, array( 'daily', 'weekly', 'monthly', 'yearly', 'decade', 'alpha', 'postbypost' ), true ) ? $type : 'yearly';
+		$limit           = ! empty( $atts['limit'] ) ? absint( $atts['limit'] ) : '';
+		$format          = sanitize_key( $atts['format'] );
+		$format          = in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
+		$before          = wp_kses_post( $atts['before'] );
+		$after           = wp_kses_post( $atts['after'] );
+		$show_post_count = in_array( strtolower( (string) $atts['show_post_count'] ), array( '1', 'true', 'yes', 'on' ), true )
+			|| in_array( strtolower( (string) $atts['showcount'] ), array( '1', 'true', 'yes', 'on' ), true ) ? 1 : 0;
+		$tag             = sanitize_key( $atts['tag'] );
+		$tag             = in_array( $tag, array( 'ul', 'ol', 'div', 'nav', 'section', 'span' ), true ) ? $tag : 'ul';
+		$order           = ( strtoupper( $atts['order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
+		$alpha_order     = ( strtoupper( $atts['alpha_order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
+		$post_order      = ( strtoupper( $atts['post_order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
+		$select_text     = sanitize_text_field( $atts['select_text'] );
+		$post_type       = sanitize_key( $atts['post_type'] );
+		$use_cpt_archive = sanitize_text_field( $atts['use_cpt_archive'] );
+
+		if ( $format == 'option' ) {
+			$dtitle = ! empty( $select_text )
+				? $select_text
+				: ( $type == 'monthly'
+					? __( 'Select Month', 'ChronoArchive' )
+					: ( $type == 'weekly'
+						? __( 'Select Week', 'ChronoArchive' )
+						: ( $type == 'daily'
+							? __( 'Select Day', 'ChronoArchive' )
+							: ( $type == 'postbypost' || $type == 'alpha'
+								? __( 'Select Post', 'ChronoArchive' )
+								: __( 'Select Year', 'ChronoArchive' )
+							)
+						)
+					)
+				);
+			$select_id = wp_unique_id( 'chronoarchive-select-' );
+			wp_enqueue_script( 'chronoarchive-dropdown', plugins_url( 'assets/js/archive-dropdown.js', __FILE__ ), array(), $this->version, true );
+			$arc  = '<label for="' . esc_attr( $select_id ) . '" class="screen-reader-text">' . esc_html__( 'Choose archive', 'ChronoArchive' ) . '</label>';
+			$arc .= '<select class="chronoarchive-select" name="archive-dropdown" id="' . esc_attr( $select_id ) . '">';
+			$arc .= '<option value="">' . esc_html( $dtitle ) . '</option>';
+			$arc .= WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+				'type'            => $type,
+				'limit'           => $limit,
+				'format'          => 'option',
+				'show_post_count' => $show_post_count,
+				'post_type'       => $post_type,
+				'order'           => $order,
+				'alpha_order'     => $alpha_order,
+				'post_order'      => $post_order,
+				'use_cpt_archive' => $use_cpt_archive,
+				'echo'            => 0
+			) );
+			$arc .= '</select>';
+		} else {
+			$arc  = '<' . $tag . '>';
+			$arch_arr = array(
+				'type'            => $type,
+				'limit'           => $limit,
+				'format'          => $format,
+				'before'          => $before,
+				'after'           => $after,
+				'show_post_count' => $show_post_count,
+				'post_type'       => $post_type,
+				'order'           => $order,
+				'alpha_order'     => $alpha_order,
+				'post_order'      => $post_order,
+				'use_cpt_archive' => $use_cpt_archive,
+				'echo'            => 0
+			);
+
+			$arc .= WP_Plugin_ChronoArchive::wp_get_archives_advanced( $arch_arr );
+			$arc .= '</' . $tag . '>';
+		}
+		return $arc;
+	}
+
+	/**
+	 * Add a link to the options page from the plugin list.
+	 *
+	 * @param array $links Existing plugin action links.
+	 * @return array Modified plugin action links.
+	 */
+	function plugin_actions( $links ) {
+		$new_links = array();
+		$new_links[] = '<a href="options-general.php?page=' . $this->plugin_options_slug . '">' . __( 'Settings', 'ChronoArchive' ) . '</a>';
+		return array_merge( $new_links, $links );
+	}
+
+	/**
+	 * Options page callback.
+	 */
+	function options_page() {
+		$like_it_arr = array(
+			__( 'really tied the room together', 'ChronoArchive' ),
+			__( 'made you feel all warm and fuzzy on the inside', 'ChronoArchive' ),
+			__( 'restored your faith in humanity... even if only for a fleeting second', 'ChronoArchive' ),
+			__( 'rocked your world', 'ChronoArchive' ),
+			__( 'inspired you to commit a random act of kindness', 'ChronoArchive' ),
+			__( 'encouraged more regular flossing of the teeth', 'ChronoArchive' ),
+			__( 'helped organize your life in the small ways that matter', 'ChronoArchive' ),
+			__( 'saved your minutes--if not tens of minutes--writing your own solution', 'ChronoArchive' ),
+			__( 'brightened your day... or darkened if you are trying to sleep in', 'ChronoArchive' ),
+			__( 'caused you to dance a little jig of joy and joyousness', 'ChronoArchive' ),
+			__( 'inspired you to tweet a little @twinpictues social love', 'ChronoArchive' ),
+			__( 'tasted great, while also being less filling', 'ChronoArchive' ),
+			__( 'caused you to shout: "everybody spread love, give me some mo!"', 'ChronoArchive' ),
+			__( 'helped you keep the funk alive', 'ChronoArchive' ),
+			__( '<a href="https://www.youtube.com/watch?v=dvQ28F5fOdU" target="_blank">soften hands while you do dishes</a>', 'ChronoArchive' ),
+			__( 'helped that little old lady <a href="https://www.youtube.com/watch?v=Ug75diEyiA0" target="_blank">find the beef</a>', 'ChronoArchive' )
+		);
+		$rand_key = array_rand( $like_it_arr );
+		$like_it = $like_it_arr[ $rand_key ];
+		?>
+		<div class="wrap">
+			<h2><?php echo $this->plugin_name; ?></h2>
+		</div>
+
+		<div class="postbox-container metabox-holder meta-box-sortables" style="width: 69%">
+			<div style="margin:0 5px;">
+				<div class="postbox">
+					<div class="handlediv" title="<?php _e( 'Click to toggle', 'ChronoArchive' ); ?>"><br/></div>
+					<h3 class="handle"><?php _e( 'ChronoArchive Settings', 'ChronoArchive' ); ?></h3>
+					<div class="inside">
+						<form method="post" action="options.php">
+							<?php
+								settings_fields( $this->domain );
+								$this->_set_options();
+								$options = $this->options;
+							?>
+
+							<fieldset class="options">
+								<table class="form-table">
+									<tr>
+										<th><?php _e( 'Custom Style', 'ChronoArchive' ); ?>:</th>
+										<td>
+											<label>
+												<textarea id="<?php echo $this->options_name; ?>[custom_css]" name="<?php echo $this->options_name; ?>[custom_css]" style="width: 100%; height: 150px;"><?php echo esc_attr( $options['custom_css'] ); ?></textarea>
+												<br /><span class="description"><?php _e( 'Custom CSS style for ultimate flexibility', 'ChronoArchive' ); ?></span>
+											</label>
+										</td>
+									</tr>
+									<tr>
+										<th><?php _e( 'CPT Archive Permalinks', 'ChronoArchive' ); ?>:</th>
+										<td>
+											<label>
+												<input type="checkbox" id="use_cpt_archive" name="<?php echo esc_attr( $this->options_name ); ?>[use_cpt_archive]" value="1" <?php echo checked( $options['use_cpt_archive'], 1 ); ?> /> <?php _e( 'Use CPT Archive Permalinks', 'ChronoArchive' ); ?>
+												<br /><span class="description"><?php printf( __( 'Use %sget_post_type_archive_link%s to generate the permalink for custom post type archives.', 'ChronoArchive' ), '<a href="https://developer.wordpress.org/reference/functions/get_post_type_archive_link/" target="_blank">', '</a>' ); ?></span>
+											</label>
+										</td>
+									</tr>
+									<tr>
+										<th><?php _e( 'Level Up!', 'ChronoArchive' ); ?>:</th>
+										<td>
+											<p><?php printf( __( '%sArchive-Pro-Matic%s offers advanced features such as archives by quarter, season, and multiple categories, along with very high-level personal support.', 'ChronoArchive' ), '<a href="https://pluginoven.com/premium-plugins/archive-pro-matic/?utm_source=ChronoArchive&utm_medium=plugin-settings-page&utm_content=archive-pro-matic&utm_campaign=archive-pro-level-up">', '</a>' ); ?></p>
+										</td>
+									</tr>
+								</table>
+							</fieldset>
+
+							<p class="submit" style="margin-bottom: 20px;">
+								<input class="button-primary" type="submit" value="<?php _e( 'Save Changes', 'ChronoArchive' ); ?>" style="float: right;" />
+							</p>
+						</form>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="postbox-container side metabox-holder meta-box-sortables" style="width:29%;">
+			<div style="margin:0 5px;">
+				<div class="postbox">
+					<div class="handlediv" title="<?php _e( 'Click to toggle', 'ChronoArchive' ); ?>"><br/></div>
+					<h3 class="handle"><?php _e( 'About', 'ChronoArchive' ); ?></h3>
+					<div class="inside">
+						<h4><?php echo $this->plugin_name; ?> <?php _e( 'Version', 'ChronoArchive' ); ?> <?php echo $this->version; ?></h4>
+						<p><?php printf( __( 'A complete listing of shortcode options and attribute demos is available, as well as free, open-source community support. ChronoArchive is a fork of the Annual Archive plugin originally developed by Twinpictures and distributed under the GPL.', 'ChronoArchive' ) ); ?></p>
+						<ul>
+							<li><?php printf( __( '%sDetailed documentation%s, complete with working demonstrations of all shortcode attributes, is available for your instructional enjoyment.', 'ChronoArchive' ), '<a href="https://pluginoven.com/plugins/annual-archive/documentation/" target="_blank">', '</a>' ); ?></li>
+							<li><?php printf( __( 'If you enjoy this plugin, please consider %ssharing your story%s with others.', 'ChronoArchive' ), '<a href="https://wordpress.org/support/plugin/anual-archive/reviews/" target="_blank">', '</a>' ); ?></li>
+							<li><?php printf( __( 'Your %sreviews%s, %sbug reports, feedback%s and %scocktail recipes%s are always welcomed.', 'ChronoArchive' ), '<a href="https://wordpress.org/support/plugin/anual-archive/reviews/">', '</a>', '<a href="https://wordpress.org/support/plugin/anual-archive/">', '</a>', '<a href="https://www.facebook.com/twinpictures">', '</a>' ); ?></li>
+						</ul>
+					</div>
+				</div>
+			</div>
+			<div class="clear"></div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Set options from saved values or defaults.
+	 */
+	function _set_options() {
+		$saved_options = get_option( $this->options_name );
+		// Backwards compatibility: check for old options.
+		if ( empty( $saved_options ) ) {
+			$saved_options = get_option( $this->domain . 'options' );
+		}
+		if ( ! empty( $saved_options ) ) {
+			foreach ( $this->options as $key => $option ) {
+				$this->options[ $key ] = empty( $saved_options[ $key ] ) ? '' : $saved_options[ $key ];
+			}
+		}
+	}
+
+} // end class WP_Plugin_ChronoArchive
+
+/**
+ * Instantiate the ChronoArchive plugin.
+ */
+$WP_Plugin_ChronoArchive = new WP_Plugin_ChronoArchive();
+
+/**
+ * ChronoArchive Widget Class.
+ */
+class ChronoArchive_Widget extends WP_Widget {
+
+	/**
+	 * Constructor.
+	 */
+	function __construct() {
+		$widget_ops = array(
+			'classname'   => 'ChronoArchive_Widget',
+			'description' => __( 'Display daily, weekly, monthly or yearly archives with a sidebar widget or shortcode', 'ChronoArchive' )
+		);
+		parent::__construct( 'ChronoArchive_Widget', __( 'ChronoArchive', 'ChronoArchive' ), $widget_ops );
+	}
+
+	/**
+	 * Front-end display of widget.
+	 *
+	 * @param array $args Widget arguments.
+	 * @param array $instance Instance settings.
+	 */
+	function widget( $args, $instance ) {
+		extract( $args );
+
+		$format         = empty( $instance['format'] ) ? 'html' : apply_filters( 'widget_format', $instance['format'] );
+		$type           = empty( $instance['type'] ) ? 'yearly' : apply_filters( 'widget_type', $instance['type'] );
+		$before         = wp_kses_post( empty( $instance['before'] ) ? '' : apply_filters( 'widget_before', $instance['before'] ) );
+		$after          = wp_kses_post( empty( $instance['after'] ) ? '' : apply_filters( 'widget_after', $instance['after'] ) );
+		$limit          = apply_filters( 'widget_limit', isset( $instance['limit'] ) ? $instance['limit'] : '' );
+		$title          = apply_filters( 'widget_title', empty( $instance['title'] ) ? '' : $instance['title'], $instance, $this->id_base );
+		$show_post_count= empty( $instance['show_post_count'] ) ? 0 : $instance['show_post_count'];
+		$order          = empty( $instance['order'] ) ? 'DESC' : apply_filters( 'widget_order', $instance['order'] );
+		$alpha_order    = empty( $instance['alpha_order'] ) ? 'ASC' : apply_filters( 'widget_alpha_order', $instance['alpha_order'] );
+		$post_order     = empty( $instance['post_order'] ) ? 'DESC' : apply_filters( 'widget_post_order', $instance['post_order'] );
+		$select_text    = empty( $instance['select_text'] ) ? '' : apply_filters( 'widget_slelect_text', $instance['select_text'] );
+		$post_type      = empty( $instance['post_type'] ) ? 'post' : apply_filters( 'widget_post_type', $instance['post_type'] );
+
+		if ( empty( $show_post_count ) && ! empty( $instance['showcount'] ) ) {
+			$show_post_count = $instance['showcount'];
+		}
+
+		echo $before_widget;
+		if ( $title ) {
+			echo $before_title . esc_html( $title ) . $after_title;
+		}
+
+		if ( $format == 'option' ) {
+			$select_id = wp_unique_id( 'chronoarchive-select-' );
+			wp_enqueue_script( 'chronoarchive-dropdown', plugins_url( 'assets/js/archive-dropdown.js', __FILE__ ), array(), '2.1.0-beta1', true );
+			$dtitle = $select_text ? $select_text : ( $type == 'monthly' ? __( 'Select Month', 'ChronoArchive' ) : ( $type == 'weekly' ? __( 'Select Week', 'ChronoArchive' ) : ( $type == 'daily' ? __( 'Select Day', 'ChronoArchive' ) : ( $type == 'postbypost' || $type == 'alpha' ? __( 'Select Post', 'ChronoArchive' ) : __( 'Select Year', 'ChronoArchive' ) ) ) ) );
+			?>
+			<label for="<?php echo esc_attr( $select_id ); ?>" class="screen-reader-text"><?php esc_html_e( 'Choose archive', 'ChronoArchive' ); ?></label>
+			<select name="archive-dropdown" id="<?php echo esc_attr( $select_id ); ?>" class="chronoarchive-select">
+				<option value=""><?php echo esc_html( $dtitle ); ?></option>
+				<?php WP_Plugin_ChronoArchive::wp_get_archives_advanced( apply_filters( 'widget_archive_dropdown_args', array(
+					'type'            => $type,
+					'format'          => 'option',
+					'show_post_count' => $show_post_count,
+					'post_type'       => $post_type,
+					'limit'           => $limit,
+					'order'           => $order,
+					'alpha_order'     => $alpha_order,
+					'post_order'      => $post_order
+				) ) ); ?>
+			</select>
+			<?php
+		} else {
+			?>
+			<ul>
+				<?php WP_Plugin_ChronoArchive::wp_get_archives_advanced( apply_filters( 'widget_archive_args', array(
+					'type'            => $type,
+					'limit'           => $limit,
+					'format'          => $format,
+					'before'          => $before,
+					'after'           => $after,
+					'show_post_count' => $show_post_count,
+					'post_type'       => $post_type,
+					'order'           => $order,
+					'alpha_order'     => $alpha_order,
+					'post_order'      => $post_order,
+					'select_text'     => $select_text
+				) ) ); ?>
+			</ul>
+			<?php
+		}
+
+		echo $after_widget;
+	}
+
+	/**
+	 * Update widget settings.
+	 *
+	 * @param array $new_instance New settings.
+	 * @param array $old_instance Previous settings.
+	 * @return array Updated settings.
+	 */
+	function update( $new_instance, $old_instance ) {
+		$instance = is_array( $old_instance ) ? $old_instance : array();
+		$new_instance = is_array( $new_instance ) ? $new_instance : array();
+		$instance['title'] = sanitize_text_field( $new_instance['title'] ?? '' );
+		$instance['before'] = wp_kses_post( $new_instance['before'] ?? '' );
+		$instance['after'] = wp_kses_post( $new_instance['after'] ?? '' );
+		$instance['select_text'] = sanitize_text_field( $new_instance['select_text'] ?? '' );
+		$instance['limit'] = empty( $new_instance['limit'] ) ? '' : absint( $new_instance['limit'] );
+		$instance['show_post_count'] = ! empty( $new_instance['show_post_count'] ) ? 1 : 0;
+		$instance['post_type'] = sanitize_key( $new_instance['post_type'] ?? 'post' );
+		$type = sanitize_key( $new_instance['type'] ?? 'yearly' );
+		$instance['type'] = in_array( $type, array( 'daily', 'weekly', 'monthly', 'yearly', 'decade', 'alpha', 'postbypost' ), true ) ? $type : 'yearly';
+		$format = sanitize_key( $new_instance['format'] ?? 'html' );
+		$instance['format'] = in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
+		foreach ( array( 'order' => 'DESC', 'alpha_order' => 'ASC', 'post_order' => 'DESC' ) as $field => $default ) {
+			$value = strtoupper( (string) ( $new_instance[ $field ] ?? $default ) );
+			$instance[ $field ] = in_array( $value, array( 'ASC', 'DESC' ), true ) ? $value : $default;
+		}
+		return $instance;
+	}
+
+	/**
+	 * Widget settings form.
+	 *
+	 * @param array $instance Current settings.
+	 */
+	function form( $instance ) {
+		$title = empty( $instance['title'] ) ? '' : stripslashes( $instance['title'] );
+		$show_post_count = empty( $instance['show_post_count'] ) ? 0 : $instance['show_post_count'];
+		$format = empty( $instance['format'] ) ? '' : stripslashes( $instance['format'] );
+		$before = empty( $instance['before'] ) ? '' : stripslashes( $instance['before'] );
+		$after = empty( $instance['after'] ) ? '' : stripslashes( $instance['after'] );
+		$type = empty( $instance['type'] ) ? '' : strip_tags( $instance['type'] );
+		$limit = empty( $instance['limit'] ) ? '' : stripslashes( $instance['limit'] );
+		$post_type = empty( $instance['post_type'] ) ? 'post' : stripslashes( $instance['post_type'] );
+		$order = empty( $instance['order'] ) ? 'DESC' : stripslashes( $instance['order'] );
+		$alpha_order = empty( $instance['alpha_order'] ) ? 'ASC' : stripslashes( $instance['alpha_order'] );
+		$post_order = empty( $instance['post_order'] ) ? 'DESC' : stripslashes( $instance['post_order'] );
+		$select_text = empty( $instance['select_text'] ) ? '' : stripslashes( $instance['select_text'] );
+
+		if ( empty( $show_post_count ) && ! empty( $instance['showcount'] ) ) {
+			$show_post_count = $instance['showcount'];
+		}
+		?>
+		<p>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>">
+				<?php _e( 'Title:', 'ChronoArchive' ); ?>
+				<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'title' ) ); ?>" type="text" value="<?php echo esc_attr( $title ); ?>" />
+			</label>
+		</p>
+		<p>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'show_post_count' ) ); ?>">
+				<input type="checkbox" id="<?php echo esc_attr( $this->get_field_id( 'show_post_count' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'show_post_count' ) ); ?>" value="1" <?php checked( $show_post_count, 1 ); ?> />
+				&nbsp;&nbsp;<?php _e( 'Show post counts', 'ChronoArchive' ); ?>
+			</label>
+		</p>
+		<p>
+			<label><?php _e( 'Archive type:', 'ChronoArchive' ); ?>
+				<select name="<?php echo esc_attr( $this->get_field_name( 'type' ) ); ?>" id="<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" class="annual_archive_type_select">
+					<?php
+						$types_arr = array(
+							'daily'     => __( 'Daily', 'ChronoArchive' ),
+							'weekly'    => __( 'Weekly', 'ChronoArchive' ),
+							'monthly'   => __( 'Monthly', 'ChronoArchive' ),
+							'yearly'    => __( 'Yearly', 'ChronoArchive' ),
+							'decade'    => __( 'Decade', 'ChronoArchive' ),
+							'alpha'     => __( 'Alpha', 'ChronoArchive' ),
+							'postbypost'=> __( 'Post By Post', 'ChronoArchive' )
+						);
+
+						$order_style = '';
+						$alpha_style = 'style="display: none;"';
+						$post_style  = 'style="display: none;"';
+
+						foreach ( $types_arr as $key => $value ) {
+							$selected = ( $key == $type || ( ! $type && $key == 'yearly' ) ) ? 'SELECTED' : '';
+							// Set data attribute for ordering fields.
+							$data_att = 'data-orderfield="wrap_' . $this->get_field_id('order') . '"';
+							if ( $key == 'alpha' ) {
+								$data_att = 'data-orderfield="wrap_' . $this->get_field_id('alpha_order') . '"';
+								if ( $key == $type ) {
+									$order_style = 'style="display: none;"';
+									$alpha_style = '';
+								}
+							}
+							if ( $key == 'postbypost' ) {
+								$data_att = 'data-orderfield="wrap_' . $this->get_field_id('post_order') . '"';
+								if ( $key == $type ) {
+									$order_style = 'style="display: none;"';
+									$post_style  = '';
+								}
+							}
+							echo '<option value="' . $key . '" ' . $data_att . ' ' . $selected . '>' . $value . '</option>';
+						}
+					?>
+				</select>
+			</label>
+		</p>
+		<p>
+			<label><?php _e( 'Format:', 'ChronoArchive' ); ?>
+				<select name="<?php echo esc_attr( $this->get_field_name( 'format' ) ); ?>" id="<?php echo esc_attr( $this->get_field_id( 'format' ) ); ?>">
+					<?php
+						$format_arr = array(
+							'html'   => __( 'HTML', 'ChronoArchive' ),
+							'option' => __( 'Option', 'ChronoArchive' ),
+							'link'   => __( 'Link', 'ChronoArchive' ),
+							'custom' => __( 'Custom', 'ChronoArchive' )
+						);
+						foreach ( $format_arr as $key => $value ) {
+							$selected = ( $key == $format || ( ! $format && $key == 'html' ) ) ? 'SELECTED' : '';
+							echo '<option value="' . $key . '" ' . $selected . '>' . $value . '</option>';
+						}
+					?>
+				</select>
+			</label>
+			<br/>
+			<span class="description">
+				<a href="https://developer.wordpress.org/reference/functions/wp_get_archives/#parameters" target="_blank"><?php _e( 'Format details', 'ChronoArchive' ); ?></a>
+			</span>
+		</p>
+		<p>
+			<label><?php _e( 'Post Type:', 'ChronoArchive' ); ?>
+				<select name="<?php echo esc_attr( $this->get_field_name( 'post_type' ) ); ?>" id="<?php echo esc_attr( $this->get_field_id( 'post_type' ) ); ?>">
+					<?php
+						$pt_args = array( 'public' => true );
+						$post_types = get_post_types( $pt_args );
+						foreach ( $post_types as $type ) {
+							$selected = ( $type == $post_type ) ? 'SELECTED' : '';
+							echo '<option value="' . $type . '" ' . $selected . '>' . $type . '</option>';
+						}
+					?>
+				</select>
+			</label>
+			<br/>
+			<span class="description">
+				<a href="https://developer.wordpress.org/reference/functions/wp_get_archives/#parameters" target="_blank"><?php _e( 'Post Type', 'ChronoArchive' ); ?></a>
+			</span>
+		</p>
+		<p>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'before' ) ); ?>"><?php _e( 'Text Before Link:', 'ChronoArchive' ); ?></label>
+			<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'before' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'before' ) ); ?>" type="text" value="<?php echo esc_attr( $before ); ?>" />
+		</p>
+		<p>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'after' ) ); ?>"><?php _e( 'Text After Link:', 'ChronoArchive' ); ?></label>
+			<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'after' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'after' ) ); ?>" type="text" value="<?php echo esc_attr( $after ); ?>" />
+		</p>
+		<p>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'select_text' ) ); ?>"><?php _e( 'Select Text:', 'ChronoArchive' ); ?></label>
+			<input class="widefat" id="<?php echo esc_attr( $this->get_field_id( 'select_text' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'select_text' ) ); ?>" type="text" value="<?php echo esc_attr( $select_text ); ?>" />
+		</p>
+		<p>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'limit' ) ); ?>"><?php _e( 'Number of archives to display:', 'ChronoArchive' ); ?></label>
+			<input class="widefat" style="width: 50px;" id="<?php echo esc_attr( $this->get_field_id( 'limit' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'limit' ) ); ?>" type="text" value="<?php echo esc_attr( $limit ); ?>" />
+		</p>
+		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php echo $order_style; ?>>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'order' ) ); ?>"><?php _e( 'Sort order:', 'ChronoArchive' ); ?></label>
+			<input id="<?php echo esc_attr( $this->get_field_id( 'order' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'order' ) ); ?>" type="radio" value="DESC" <?php checked( $order, 'DESC' ); ?> /> DESC
+			<input name="<?php echo esc_attr( $this->get_field_name( 'order' ) ); ?>" type="radio" value="ASC" <?php checked( $order, 'ASC' ); ?> /> ASC
+		</p>
+		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'alpha_order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php echo $alpha_style; ?>>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'alpha_order' ) ); ?>"><?php _e( 'Alpha order:', 'ChronoArchive' ); ?></label>
+			<input id="<?php echo esc_attr( $this->get_field_id( 'alpha_order' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'alpha_order' ) ); ?>" type="radio" value="DESC" <?php checked( $alpha_order, 'DESC' ); ?> /> DESC
+			<input name="<?php echo esc_attr( $this->get_field_name( 'alpha_order' ) ); ?>" type="radio" value="ASC" <?php checked( $alpha_order, 'ASC' ); ?> /> ASC
+		</p>
+		<p id="wrap_<?php echo esc_attr( $this->get_field_id( 'post_order' ) ); ?>" class="order_<?php echo esc_attr( $this->get_field_id( 'type' ) ); ?>" <?php echo $post_style; ?>>
+			<label for="<?php echo esc_attr( $this->get_field_id( 'post_order' ) ); ?>"><?php _e( 'Post order:', 'ChronoArchive' ); ?></label>
+			<input id="<?php echo esc_attr( $this->get_field_id( 'post_order' ) ); ?>" name="<?php echo esc_attr( $this->get_field_name( 'post_order' ) ); ?>" type="radio" value="DESC" <?php checked( $post_order, 'DESC' ); ?> /> DESC
+			<input name="<?php echo esc_attr( $this->get_field_name( 'post_order' ) ); ?>" type="radio" value="ASC" <?php checked( $post_order, 'ASC' ); ?> /> ASC
+		</p>
+		<?php
+	}
+} // end class ChronoArchive_Widget
+
+/**
+ * Register ChronoArchive_Widget.
+ */
+function ChronoArchive_register_widget() {
+	register_widget( 'ChronoArchive_Widget' );
+}
+add_action( 'widgets_init', 'ChronoArchive_register_widget' );
+?>
+
