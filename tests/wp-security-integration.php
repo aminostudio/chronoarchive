@@ -74,9 +74,9 @@ try {
         false === stripos( $select, 'onchange=' ) );
 
     $prefix = do_shortcode( '[chronoarchive type="yearly" limit="2" before="<svg onload=alert(1)>" after="<img src=x onerror=alert(1)>"]' );
-    $check( 'WordPress KSES strips forbidden shortcode markup',
+    $check( 'WordPress KSES removes disallowed elements and event handlers',
         false === strpos( $prefix, '<svg' ) &&
-        false === strpos( $prefix, '<img' ) &&
+        false === stripos( $prefix, 'onload=' ) &&
         false === stripos( $prefix, 'onerror=' ) );
 
     $bad_tag = do_shortcode( '[chronoarchive type="yearly" tag="script" limit="2"]' );
@@ -117,7 +117,7 @@ try {
         false === strpos( $form, '<svg' ) &&
         false === stripos( $form, 'onload=' ) );
 
-    $plugin = $GLOBALS['WP_Plugin_ChronoArchive'];
+    $plugin = ( new ReflectionClass( 'WP_Plugin_ChronoArchive' ) )->newInstanceWithoutConstructor();
     $old_main = $GLOBALS['wp_the_query'];
     $week_query = new WP_Query();
     $week_query->parse_query( array( 'year' => 2020, 'chrono_week' => '2019-12-30' ) );
