@@ -55,6 +55,9 @@ class WP_Plugin_ChronoArchive {
 	 */
 	var $options = array(
 		'custom_css' => '',
+		// Explicitly approved by an edit_css-capable user. Legacy multisite
+		// values are not trusted implicitly when upgrading this plugin.
+		'custom_css_approved' => '',
 		'use_cpt_archive' => '',
 	);
 
@@ -212,6 +215,12 @@ class WP_Plugin_ChronoArchive {
 	 * No raw style elements are echoed by this plugin.
 	 */
 	function plugin_enqueue_styles() {
+		// Site administrators in a multisite network normally cannot use
+		// unfiltered CSS. Previously saved values must be approved again by
+		// a super admin before they can affect public output.
+		if ( is_multisite() && '1' !== $this->options['custom_css_approved'] ) {
+			return;
+		}
 		$css = self::safe_custom_css( $this->options['custom_css'] );
 		if ( '' === trim( $css ) ) {
 			return;
@@ -255,10 +264,29 @@ class WP_Plugin_ChronoArchive {
 	 */
 	function sanitize_settings( $input ) {
 		$input = is_array( $input ) ? $input : array();
-		$css = isset( $input['custom_css'] ) && is_string( $input['custom_css'] )
-			? wp_strip_all_tags( wp_unslash( $input['custom_css'] ) ) : '';
+		$previous = get_option( $this->options_name, array() );
+		$previous = is_array( $previous ) ? $previous : array();
+
+		// manage_options may be held by a multisite subsite administrator,
+		// who intentionally lacks the edit_css (unfiltered_html) capability.
+		// Preserve existing settings without allowing that user to replace
+		// arbitrary CSS or self-approve an untrusted legacy value.
+		if ( current_user_can( 'edit_css' ) ) {
+			$css = isset( $input['custom_css'] ) && is_string( $input['custom_css'] )
+				? substr( wp_strip_all_tags( wp_unslash( $input['custom_css'] ) ), 0, 20000 )
+				: '';
+			$approved = '1';
+		} else {
+			$css = isset( $previous['custom_css'] ) && is_string( $previous['custom_css'] )
+				? substr( $previous['custom_css'], 0, 20000 )
+				: '';
+			$approved = isset( $previous['custom_css_approved'] ) &&
+				'1' === $previous['custom_css_approved'] ? '1' : '';
+		}
+
 		return array(
 			'custom_css' => $css,
+			'custom_css_approved' => $approved,
 			'use_cpt_archive' => ! empty( $input['use_cpt_archive'] ) ? '1' : '',
 		);
 	}
@@ -697,9 +725,9 @@ class WP_Plugin_ChronoArchive {
 						<td>
 							<textarea id="chronoarchive-custom-css"
 								name="<?php echo esc_attr( $this->options_name ); ?>[custom_css]"
-								rows="7" cols="70" class="large-text code"><?php echo esc_textarea( $options['custom_css'] ); ?></textarea>
+								rows="7" cols="70" class="large-text code" <?php disabled( ! current_user_can( 'edit_css' ), true ); ?>><?php echo esc_textarea( $options['custom_css'] ); ?></textarea>
 							<p class="description">
-								<?php esc_html_e( 'Custom CSS is output through the WordPress Styles API. Restrict this setting to trusted administrators.', 'ChronoArchive' ); ?>
+								<?php esc_html_e( 'Only users with the WordPress edit_css capability may change custom CSS. Previously saved multisite CSS requires approval by an authorized administrator.', 'ChronoArchive' ); ?>
 							</p>
 						</td>
 					</tr>
@@ -749,6 +777,9 @@ class WP_Plugin_ChronoArchive {
 			is_string( $saved_options['custom_css'] )
 			? substr( $saved_options['custom_css'], 0, 20000 )
 			: '';
+		$this->options['custom_css_approved'] = isset( $saved_options['custom_css_approved'] ) &&
+			is_string( $saved_options['custom_css_approved'] ) &&
+			'1' === $saved_options['custom_css_approved'] ? '1' : '';
 		$this->options['use_cpt_archive'] = ! empty( $saved_options['use_cpt_archive'] ) &&
 			is_scalar( $saved_options['use_cpt_archive'] )
 			? '1'
