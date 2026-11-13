@@ -134,3 +134,22 @@ jobs:
             exit 1
           fi
           echo 'PASS: invalid week gives 404 without unrelated archives'
+
+          decade_url='http://127.0.0.1:8093/?year=2010&decade=2010'
+          decade_code=$(curl --silent --show-error --max-time 20 \
+            --output /tmp/chrono-decade.html --write-out '%{http_code}' "$decade_url")
+          echo "Valid decade HTTP status: $decade_code"
+          test "$decade_code" = 200
+          grep -Fq 'CA HTTP Boundary Dec' /tmp/chrono-decade.html
+          if grep -Fq 'CA HTTP Boundary Jan' /tmp/chrono-decade.html; then
+            echo 'FAIL: decade archive included a post from the next decade'
+            exit 1
+          fi
+          echo 'PASS: valid decade excludes the next decade'
+
+          malformed_decade_url='http://127.0.0.1:8093/?year=2010&decade=2015'
+          malformed_decade_code=$(curl --silent --show-error --max-time 20 \
+            --output /tmp/chrono-invalid-decade.html --write-out '%{http_code}' "$malformed_decade_url")
+          echo "Invalid decade HTTP status: $malformed_decade_code"
+          test "$malformed_decade_code" = 404
+          echo 'PASS: invalid decade gives 404'
