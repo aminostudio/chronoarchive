@@ -154,7 +154,22 @@ $widget->widget( array( 'before_widget' => '<aside>', 'after_widget' => '</aside
 $widget_output = ob_get_clean();
 $assert( 'Classic widget renders archive links', false !== strpos( $widget_output, '<a ' ) );
 
+// Render administrator settings with a malicious historic textarea value.
+// WordPress esc_textarea() must keep the payload inside the textarea.
+update_option( 'WP_ChronoArchive_options', array(
+    'custom_css' => '</textarea><script>alert(1)</script>',
+    'use_cpt_archive' => '1',
+) );
 $old_user = get_current_user_id();
+wp_set_current_user( 1 );
+ob_start();
+$plugin_under_test->options_page();
+$admin_html = ob_get_clean();
+$assert( 'Admin settings screen renders', false !== strpos( $admin_html, 'chronoarchive-custom-css' ) );
+$assert( 'Admin textarea closes only once', 1 === substr_count( $admin_html, '</textarea>' ) );
+$assert( 'Admin saved CSS cannot inject script', false === stripos( $admin_html, '<script>' ) );
+$assert( 'Admin settings form includes WordPress nonce', false !== strpos( $admin_html, '_wpnonce' ) );
+delete_option( 'WP_ChronoArchive_options' );
 wp_set_current_user( 0 );
 ob_start();
 $plugin_under_test->options_page();
