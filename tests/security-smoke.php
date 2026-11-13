@@ -13,6 +13,7 @@ $GLOBALS['ca_mock_options'] = array();
 $GLOBALS['ca_fake_query'] = '';
 
 class WP_Widget {
+    public $id_base = 'chronoarchive_widget';
     public function __construct() {}
 }
 class CA_Fake_DB {
@@ -31,6 +32,7 @@ class CA_Fake_DB {
 }
 $GLOBALS['wpdb'] = new CA_Fake_DB();
 
+function sanitize_text_field( $value ) { return strip_tags( (string) $value ); }
 function get_option( $name, $default = false ) {
     return isset( $GLOBALS['ca_mock_options'][ $name ] ) ? $GLOBALS['ca_mock_options'][ $name ] : $default;
 }
