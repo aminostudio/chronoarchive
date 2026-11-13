@@ -109,8 +109,9 @@ function wp_cache_get( $key, $group ) { return false; }
 function wp_cache_set( $key, $value, $group ) {}
 function get_year_link( $year ) { return 'https://example.test/' . (int) $year . '/'; }
 function get_archives_link( $url, $text, $format, $before = '', $after = '' ) {
-    return '<li>' . $before . '<a href="' . htmlspecialchars( $url, ENT_QUOTES, 'UTF-8' ) .
-        '">' . esc_html( $text ) . '</a>' . $after . '</li>';
+    return apply_filters( 'get_archives_link', '<li>' . $before .
+        '<a href="' . htmlspecialchars( $url, ENT_QUOTES, 'UTF-8' ) .
+        '">' . esc_html( $text ) . '</a>' . $after . '</li>' );
 }
 function is_admin() { return false; }
 
@@ -277,6 +278,31 @@ try {
 ca_assert( 'Non-array shortcode filter return is not fatal', null === $render_error );
 ca_assert( 'Non-array shortcode filter return uses safe defaults', false !== strpos( $filtered, '2026' ) );
 unset( $GLOBALS['ca_mock_filters']['shortcode_atts_archives'] );
+
+// Ensure direct return-mode archive output is escaped, including the
+// get_archives_link filter, not only output echoed directly by the plugin.
+$GLOBALS['ca_mock_filters']['get_archives_link'] =
+    '<li><a href="https://example.test/">Year</a></li><script>alert(1)</script>';
+$returned = WP_Plugin_ChronoArchive::wp_get_archives_advanced(
+    array( 'type' => 'yearly', 'echo' => 0, 'limit' => 1 )
+);
+ca_assert( 'Returned archive links filter executable HTML', false === stripos( $returned, '<script' ) );
+ca_assert( 'Returned archive links preserve normal list items', false !== strpos( $returned, '<li>' ) );
+$GLOBALS['ca_mock_filters']['get_archives_link'] =
+    '<option value="https://example.test/2026/">2026</option><script>alert(1)</script>';
+$option_output = WP_Plugin_ChronoArchive::wp_get_archives_advanced(
+    array( 'type' => 'yearly', 'format' => 'option', 'echo' => 0, 'limit' => 1 )
+);
+ca_assert( 'Returned option format rejects executable HTML',
+    false !== strpos( $option_output, '<option' ) && false === stripos( $option_output, '<script' ) );
+$GLOBALS['ca_mock_filters']['get_archives_link'] =
+    '<link rel="archives" href="https://example.test/2026/"><script>alert(1)</script>';
+$link_output = WP_Plugin_ChronoArchive::wp_get_archives_advanced(
+    array( 'type' => 'yearly', 'format' => 'link', 'echo' => 0, 'limit' => 1 )
+);
+ca_assert( 'Returned LINK format rejects executable HTML',
+    false !== strpos( $link_output, '<link' ) && false === stripos( $link_output, '<script' ) );
+unset( $GLOBALS['ca_mock_filters']['get_archives_link'] );
 
 echo "\nMock security checks: {$passes} passed, {$fails} failed.\n";
 exit( $fails ? 1 : 0 );
