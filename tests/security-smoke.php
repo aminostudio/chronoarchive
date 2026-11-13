@@ -82,6 +82,8 @@ function wp_kses_post( $text ) {
     $text = preg_replace( '/<\/?(?:script|svg|img)[^>]*>/i', '', (string) $text );
     return preg_replace( '/\s+on[a-z]+\s*=\s*(?:"[^"]*"|\x27[^\x27]*\x27|[^\s>]+)/i', '', $text );
 }
+function wp_kses_allowed_html( $context ) { return array( 'a' => array( 'href' => true ), 'li' => array(), 'ul' => array() ); }
+function wp_kses( $text, $allowed_html ) { return $text; } // Stub: only real-WP tests validate final HTML filtering.
 function esc_html( $value ) {
     return htmlspecialchars( (string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false );
 }
