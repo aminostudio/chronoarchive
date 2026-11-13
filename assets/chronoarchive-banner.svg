@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="278" viewBox="0 0 1200 278" role="img" aria-labelledby="title description">
+  <title id="title">ChronoArchive by Amino Studio</title>
+  <desc id="description">An elegant timeline-inspired project banner with year markers, archive brackets and restrained teal and mint accents.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#08161d"/>
+      <stop offset="100%" stop-color="#10242a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6edacb"/>
+      <stop offset="100%" stop-color="#b7e8b0"/>
+    </linearGradient>
+    <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="0.75" fill="#55808a" opacity="0.18"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="278" rx="18" fill="url(#background)"/>
+  <rect width="1200" height="278" rx="18" fill="url(#dots)"/>
+  <path d="M 0 1 H 1200" stroke="url(#accent)" stroke-width="3" opacity="0.9"/>
+  <g font-family="Arial,Helvetica,sans-serif">
+    <text x="56" y="66" fill="#8fc6c4" font-size="17" font-weight="600" letter-spacing="2.5">AMINO / STUDIO  ·  OPEN SOURCE</text>
+    <text x="53" y="145" fill="#eff9f5" font-size="68" font-weight="700" letter-spacing="-2.5">Chrono<tspan fill="#9adfc7">Archive</tspan></text>
+    <text x="56" y="193" fill="#a9c7c6" font-size="21">A better view of WordPress history.</text>
+    <text x="57" y="243" fill="#75a8aa" font-size="14" letter-spacing="1">CHRONOLOGICAL ARCHIVES  /  ACCESSIBLE NAVIGATION  /  MODERN QA</text>
+  </g>
+  <g transform="translate(847,36)">
+    <path d="M 76 18 V 190 M 156 18 V 190 M 236 18 V 190" stroke="#467378" opacity=".17" stroke-width="1" />
+    <path d="M 10 80 H 288" fill="none" stroke="#527b80" stroke-width="2.5"/>
+    <path d="M 10 80 H 190" fill="none" stroke="url(#accent)" stroke-width="3" opacity=".8"/>
+    <g fill="#b7e8b0">
+      <circle cx="38" cy="80" r="7"/>
+      <circle cx="120" cy="80" r="7"/>
+      <circle cx="204" cy="80" r="7"/>
+    </g>
+    <g fill="#8bb1b5" font-family="ui-monospace,SFMono-Regular,Consolas,monospace" font-size="13" text-anchor="middle">
+      <text x="38" y="113">1990s</text>
+      <text x="120" y="113">2000s</text>
+      <text x="204" y="113">2010s</text>
+    </g>
+    <path d="M 19 152 V 135 H 270 V 152 M 19 135 H 270" fill="none" stroke="#60979b" opacity=".55"/>
+    <g fill="#a4d5cd" font-family="ui-monospace,SFMono-Regular,Consolas,monospace" font-size="16">
+      <text x="7" y="182">{</text><text x="268" y="182">}</text>
+      <text x="50" y="182" font-size="12" letter-spacing="1.2">YEAR · MONTH · WEEK</text>
+    </g>
+  </g>
+</svg>
