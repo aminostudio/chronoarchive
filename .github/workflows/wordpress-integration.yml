@@ -7,6 +7,11 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: chrono-wp-integration-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+
 jobs:
   wordpress-integration:
     name: WP ${{ matrix.wp }} / PHP ${{ matrix.php }}
