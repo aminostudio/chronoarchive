@@ -111,6 +111,9 @@ jobs:
           if ! grep -Fq 'CA HTTP Boundary Dec' /tmp/chrono-week.html; then
             echo 'FAIL: December fixture not found in HTTP archive response'
             echo 'Response title and body excerpt:'
+            wc -c /tmp/chrono-week.html || true
+            echo 'PHP built-in server log (last 35 lines):'
+            tail -n 35 /tmp/chrono-http-server.log || true
             grep -Eo '<title>[^<]*</title>' /tmp/chrono-week.html | head -3 || true
             sed 's/<[^>]*>/ /g' /tmp/chrono-week.html | head -c 1200 || true
             exit 1
