@@ -86,6 +86,42 @@ $assert( 'Cross-year week correctly linked', false !== strpos( $weekly, 'chrono_
 $unsafe = do_shortcode( '[archives type="yearly" limit="2" tag="script" before="<span onclick=alert(1)>Prefix</span>"]' );
 $assert( 'Invalid container falls back to UL', 0 === strpos( trim( $unsafe ), '<ul>' ) );
 $assert( 'Shortcode event handler removed', false === stripos( $unsafe, 'onclick=' ) );
+// The named shortcode_atts_archives hook may return malformed values.
+// This is a typed-input resilience test using real WordPress functions.
+$malformed_shortcode_filter = static function ( $attributes ) {
+    $attributes['type'] = array( 'yearly' );
+    $attributes['before'] = array( '<svg onload=alert(1)>' );
+    $attributes['after'] = new stdClass();
+    $attributes['tag'] = array( 'script' );
+    $attributes['select_text'] = array( '<img src=x onerror=alert(1)>' );
+    $attributes['order'] = array( 'DESC' );
+    $attributes['limit'] = array( 2 );
+    return $attributes;
+};
+add_filter( 'shortcode_atts_archives', $malformed_shortcode_filter, 10, 1 );
+$filtered_error = '';
+try {
+    $filtered_shortcode = do_shortcode( '[chronoarchive type="yearly" limit="2"]' );
+} catch ( Throwable $exception ) {
+    $filtered_error = $exception->getMessage();
+    $filtered_shortcode = '';
+}
+remove_filter( 'shortcode_atts_archives', $malformed_shortcode_filter, 10 );
+$assert( 'Malformed shortcode filter values do not throw', '' === $filtered_error );
+$assert( 'Malformed filtered tag renders allowed container', 0 === strpos( trim( $filtered_shortcode ), '<ul>' ) );
+$assert( 'Filtered unsafe HTML cannot execute',
+    false === stripos( $filtered_shortcode, '<svg' ) &&
+    false === stripos( $filtered_shortcode, '<script' ) &&
+    false === stripos( $filtered_shortcode, 'onerror=' ) );
+$assert( 'Malformed filtered shortcode retains archive links', false !== strpos( $filtered_shortcode, '<a ' ) );
+
+$object_shortcode_filter = static function () { return new stdClass(); };
+add_filter( 'shortcode_atts_archives', $object_shortcode_filter, 10, 1 );
+$filtered_default = do_shortcode( '[archives type="yearly" limit="2"]' );
+remove_filter( 'shortcode_atts_archives', $object_shortcode_filter, 10 );
+$assert( 'Non-array attribute filter returns safe default archive',
+    0 === strpos( trim( $filtered_default ), '<ul>' ) && false !== strpos( $filtered_default, '<a ' ) );
+
 $select = do_shortcode( '[chronoarchive type="yearly" format="option" limit="2" select_text="Select archive"]' );
 $assert( 'Selector has accessible label', false !== strpos( $select, '<label' ) );
 $assert( 'No inline onchange', false === stripos( $select, 'onchange=' ) );
