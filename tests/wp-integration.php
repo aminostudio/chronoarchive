@@ -89,6 +89,18 @@ $assert( 'Shortcode event handler removed', false === stripos( $unsafe, 'onclick
 $select = do_shortcode( '[chronoarchive type="yearly" format="option" limit="2" select_text="Select archive"]' );
 $assert( 'Selector has accessible label', false !== strpos( $select, '<label' ) );
 $assert( 'No inline onchange', false === stripos( $select, 'onchange=' ) );
+ob_start();
+WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'limit' => 2, 'format' => 'option', 'echo' => 1,
+) );
+$rendered_options = ob_get_clean();
+$assert( 'Direct API escapes HTML option format', substr_count( $rendered_options, '<option' ) === 2 );
+ob_start();
+WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'limit' => 2, 'format' => 'link', 'echo' => 1,
+) );
+$rendered_links = ob_get_clean();
+$assert( 'Direct API preserves sanitized LINK format', substr_count( $rendered_links, '<link' ) === 2 );
 $assert( 'Unknown post type returns empty entries', false === strpos(
     do_shortcode( '[chronoarchive type="yearly" post_type="missing_ca_type"]' ), '<a ' ) );
 
