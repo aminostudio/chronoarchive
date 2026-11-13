@@ -1,10 +1,17 @@
 name: WordPress runtime (security)
 
 on:
-  push:
-    branches:
-      - 'security/**'
   pull_request:
+    paths:
+      - 'chronoarchive.php'
+      - 'tests/**'
+      - '.github/workflows/wordpress-runtime.yml'
+      - '.wp-env.json'
+  workflow_dispatch:
+
+concurrency:
+  group: chronoarchive-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -23,6 +30,7 @@ jobs:
       - name: Install WordPress environment
         run: npm install --global @wordpress/env
       - name: Start disposable WordPress + MySQL
+        timeout-minutes: 10
         run: wp-env start
       - name: Verify plugin active
         run: wp-env run cli wp plugin status chronoarchive
