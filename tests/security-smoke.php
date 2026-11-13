@@ -196,5 +196,36 @@ $check( 'Valid cross-year week sets bounded query', isset( $q->vars['date_query'
 $q = new QA_Query( array( 'chrono_week' => '2019-12-30' ), false );
 $plugin->ChronoArchive_decade_filter( $q );
 $check( 'Non-archive page query unaffected', ! isset( $q->vars['date_query'] ) );
+$out = $plugin->shortcode( array(
+    'type' => 'yearly', 'limit' => 1,
+    'before' => '<img src=x onerror=alert(1)>',
+    'after' => '<svg onload=alert(1)>',
+) );
+$check( 'Shortcode prefixes and suffixes cannot render event handlers',
+    false === strpos( $out, '<img' ) &&
+    false === strpos( $out, '<svg' ) && false === strpos( $out, 'onerror=' ) );
+
+ob_start();
+$widget->widget( array(), array(
+    'type' => 'yearly', 'show_post_count' => '0', 'showcount' => '1',
+) );
+$legacy_counts = ob_get_clean();
+$check( 'Historical showcount alias survives widget hardening',
+    false !== strpos( $legacy_counts, '(2)' ) );
+
+$plugin->options['custom_css'] = 'body { color: red; }</style><svg onload=alert(1)>';
+ob_start();
+$plugin->plugin_head_inject();
+$custom_css = ob_get_clean();
+$check( 'Stored CSS cannot close a style tag to inject HTML',
+    false === strpos( $custom_css, '<svg' ) &&
+    false !== strpos( $custom_css, '&lt;/style&gt;' ) );
+$plugin->options['custom_css'] = array( 'invalid' );
+ob_start();
+$plugin->plugin_head_inject();
+$invalid_css = ob_get_clean();
+$check( 'Malformed stored CSS option produces no output',
+    '' === $invalid_css );
+
 printf( "\nSecurity contracts: %d passed, %d failed.\n", $pass, $fail );
 exit( $fail ? 1 : 0 );
