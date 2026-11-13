@@ -11,6 +11,8 @@ define( 'ABSPATH', '/' );
 $GLOBALS['ca_mock_filters'] = array();
 $GLOBALS['ca_mock_options'] = array();
 $GLOBALS['ca_fake_query'] = '';
+$GLOBALS['ca_mock_multisite'] = false;
+$GLOBALS['ca_mock_edit_css'] = true;
 
 class WP_Widget {
     public $id_base = 'chronoarchive_widget';
@@ -48,6 +50,8 @@ class CA_Fake_DB {
 }
 $GLOBALS['wpdb'] = new CA_Fake_DB();
 
+function is_multisite() { return $GLOBALS['ca_mock_multisite']; }
+function current_user_can( $cap ) { return 'edit_css' === $cap && $GLOBALS['ca_mock_edit_css']; }
 function sanitize_text_field( $value ) { return strip_tags( (string) $value ); }
 function get_option( $name, $default = false ) {
     return isset( $GLOBALS['ca_mock_options'][ $name ] ) ? $GLOBALS['ca_mock_options'][ $name ] : $default;
@@ -55,6 +59,13 @@ function get_option( $name, $default = false ) {
 function add_action() {}
 function add_filter() {}
 function add_shortcode() {}
+function shortcode_atts( $pairs, $atts, $shortcode = '' ) {
+    $out = array();
+    foreach ( $pairs as $key => $default ) {
+        $out[ $key ] = isset( $atts[ $key ] ) ? $atts[ $key ] : $default;
+    }
+    return apply_filters( 'shortcode_atts_' . $shortcode, $out );
+}
 function plugin_basename( $path ) { return basename( $path ); }
 function __($s) { return $s; }
 function esc_html($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
@@ -102,8 +113,9 @@ function wp_cache_get( $key, $group ) { return false; }
 function wp_cache_set( $key, $value, $group ) {}
 function get_year_link( $year ) { return 'https://example.test/' . (int) $year . '/'; }
 function get_archives_link( $url, $text, $format, $before = '', $after = '' ) {
-    return '<li>' . $before . '<a href="' . htmlspecialchars( $url, ENT_QUOTES, 'UTF-8' ) .
-        '">' . esc_html( $text ) . '</a>' . $after . '</li>';
+    return apply_filters( 'get_archives_link', '<li>' . $before .
+        '<a href="' . htmlspecialchars( $url, ENT_QUOTES, 'UTF-8' ) .
+        '">' . esc_html( $text ) . '</a>' . $after . '</li>' );
 }
 function is_admin() { return false; }
 
@@ -221,6 +233,131 @@ $widget->widget( array( 'before_widget' => '<aside>' ), array( 'type' => 'yearly
 $filtered_widget_html = ob_get_clean();
 ca_assert( 'Malformed wrapper filter is ignored', false === strpos( $filtered_widget_html, 'Array' ) && false !== strpos( $filtered_widget_html, '2026' ) );
 unset( $GLOBALS['ca_mock_filters']['widget_before'] );
+
+// A trusted WordPress shortcode_atts filter may unexpectedly return malformed
+// data. The plugin must not emit PHP type warnings or unsafe markup.
+$GLOBALS['ca_mock_filters']['shortcode_atts_archives'] = array(
+    'type' => array( 'yearly' ),
+    'limit' => array( 2 ),
+    'format' => array( 'html' ),
+    'before' => array( '<svg onload=alert(1)>' ),
+    'after' => new stdClass(),
+    'show_post_count' => array( 'yes' ),
+    'showcount' => array( 'yes' ),
+    'tag' => array( 'script' ),
+    'order' => array( 'DROP' ),
+    'alpha_order' => array( 'DESC' ),
+    'post_order' => array( 'ASC' ),
+    'select_text' => array( '<img onerror=alert(1)>' ),
+    'post_type' => array( 'post' ),
+    'use_cpt_archive' => array( true ),
+);
+$warnings = 0;
+set_error_handler( function ( $severity, $message ) use ( &$warnings ) {
+    ++$warnings;
+    throw new ErrorException( $message, 0, $severity );
+} );
+$render_error = null;
+$filtered = '';
+try {
+    $filtered = $WP_Plugin_ChronoArchive->shortcode( array( 'type' => 'yearly' ) );
+} catch ( Throwable $error ) {
+    $render_error = $error->getMessage();
+}
+restore_error_handler();
+ca_assert( 'Malformed shortcode filter output does not throw', null === $render_error );
+ca_assert( 'Malformed shortcode filter output causes no PHP warnings', 0 === $warnings );
+ca_assert( 'Malformed shortcode tag falls back to UL', 0 === strpos( trim( $filtered ), '<ul>' ) );
+ca_assert( 'Malformed shortcode filter cannot insert active SVG or script', false === stripos( $filtered, '<svg' ) && false === stripos( $filtered, '<script' ) );
+ca_assert( 'Malformed shortcode filter preserves archive listing', false !== strpos( $filtered, '2026' ) );
+
+$GLOBALS['ca_mock_filters']['shortcode_atts_archives'] = new stdClass();
+$render_error = null;
+$filtered = '';
+try {
+    $filtered = $WP_Plugin_ChronoArchive->shortcode( array() );
+} catch ( Throwable $error ) {
+    $render_error = $error->getMessage();
+}
+ca_assert( 'Non-array shortcode filter return is not fatal', null === $render_error );
+ca_assert( 'Non-array shortcode filter return uses safe defaults', false !== strpos( $filtered, '2026' ) );
+unset( $GLOBALS['ca_mock_filters']['shortcode_atts_archives'] );
+
+// Ensure direct return-mode archive output is escaped, including the
+// get_archives_link filter, not only output echoed directly by the plugin.
+$GLOBALS['ca_mock_filters']['get_archives_link'] =
+    '<li><a href="https://example.test/">Year</a></li><script>alert(1)</script>';
+$returned = WP_Plugin_ChronoArchive::wp_get_archives_advanced(
+    array( 'type' => 'yearly', 'echo' => 0, 'limit' => 1 )
+);
+ca_assert( 'Returned archive links filter executable HTML', false === stripos( $returned, '<script' ) );
+ca_assert( 'Returned archive links preserve normal list items', false !== strpos( $returned, '<li>' ) );
+$GLOBALS['ca_mock_filters']['get_archives_link'] =
+    '<option value="https://example.test/2026/">2026</option><script>alert(1)</script>';
+$option_output = WP_Plugin_ChronoArchive::wp_get_archives_advanced(
+    array( 'type' => 'yearly', 'format' => 'option', 'echo' => 0, 'limit' => 1 )
+);
+ca_assert( 'Returned option format rejects executable HTML',
+    false !== strpos( $option_output, '<option' ) && false === stripos( $option_output, '<script' ) );
+$GLOBALS['ca_mock_filters']['get_archives_link'] =
+    '<link rel="archives" href="https://example.test/2026/"><script>alert(1)</script>';
+$link_output = WP_Plugin_ChronoArchive::wp_get_archives_advanced(
+    array( 'type' => 'yearly', 'format' => 'link', 'echo' => 0, 'limit' => 1 )
+);
+ca_assert( 'Returned LINK format rejects executable HTML',
+    false !== strpos( $link_output, '<link' ) && false === stripos( $link_output, '<script' ) );
+unset( $GLOBALS['ca_mock_filters']['get_archives_link'] );
+
+// WordPress treats unfiltered CSS as a privileged capability, notably on
+// multisite subsites. No legacy CSS should be rendered without reapproval.
+$GLOBALS['ca_mock_multisite'] = true;
+$GLOBALS['ca_mock_options']['WP_ChronoArchive_options'] = array(
+    'custom_css' => '.legacy { background:url(https://external.example/image) }',
+    'use_cpt_archive' => '1',
+);
+$WP_Plugin_ChronoArchive->_set_options();
+$GLOBALS['ca_styles'] = array( 'registered' => array(), 'enqueued' => array(), 'css' => array() );
+$WP_Plugin_ChronoArchive->plugin_enqueue_styles();
+ca_assert( 'Multisite legacy CSS is not rendered without approval',
+    empty( $GLOBALS['ca_styles']['css'] ) );
+
+$GLOBALS['ca_mock_edit_css'] = false;
+$denied_css = $WP_Plugin_ChronoArchive->sanitize_settings( array(
+    'custom_css' => '.changed { color:red }',
+    'use_cpt_archive' => '1',
+) );
+ca_assert( 'Non-edit_css user cannot overwrite CSS', 
+    $denied_css['custom_css'] === $GLOBALS['ca_mock_options']['WP_ChronoArchive_options']['custom_css'] );
+ca_assert( 'Non-edit_css user cannot approve legacy CSS',
+    '' === $denied_css['custom_css_approved'] );
+ca_assert( 'Non-edit_css user may still update non-CSS settings',
+    '1' === $denied_css['use_cpt_archive'] );
+
+$GLOBALS['ca_mock_edit_css'] = true;
+$approved_css = $WP_Plugin_ChronoArchive->sanitize_settings( array(
+    'custom_css' => '.approved{color:blue}</style><script>alert(1)</script>',
+    'use_cpt_archive' => '1',
+) );
+ca_assert( 'Edit_css user may authorize a sanitized stylesheet',
+    '1' === $approved_css['custom_css_approved'] &&
+    false === strpos( $approved_css['custom_css'], '<' ) );
+$GLOBALS['ca_mock_options']['WP_ChronoArchive_options'] = $approved_css;
+$WP_Plugin_ChronoArchive->_set_options();
+$GLOBALS['ca_styles'] = array( 'registered' => array(), 'enqueued' => array(), 'css' => array() );
+$WP_Plugin_ChronoArchive->plugin_enqueue_styles();
+ca_assert( 'Approved multisite CSS is enqueued',
+    count( $GLOBALS['ca_styles']['css'] ) === 1 );
+
+$GLOBALS['ca_mock_edit_css'] = false;
+$unchanged = $WP_Plugin_ChronoArchive->sanitize_settings( array(
+    'custom_css' => '.modified{color:red}',
+    'use_cpt_archive' => '',
+) );
+ca_assert( 'Later unprivileged save preserves trusted CSS and approval',
+    $unchanged['custom_css'] === $approved_css['custom_css'] &&
+    '1' === $unchanged['custom_css_approved'] );
+$GLOBALS['ca_mock_multisite'] = false;
+$GLOBALS['ca_mock_edit_css'] = true;
 
 echo "\nMock security checks: {$passes} passed, {$fails} failed.\n";
 exit( $fails ? 1 : 0 );

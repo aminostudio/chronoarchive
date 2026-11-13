@@ -86,6 +86,42 @@ $assert( 'Cross-year week correctly linked', false !== strpos( $weekly, 'chrono_
 $unsafe = do_shortcode( '[archives type="yearly" limit="2" tag="script" before="<span onclick=alert(1)>Prefix</span>"]' );
 $assert( 'Invalid container falls back to UL', 0 === strpos( trim( $unsafe ), '<ul>' ) );
 $assert( 'Shortcode event handler removed', false === stripos( $unsafe, 'onclick=' ) );
+// The named shortcode_atts_archives hook may return malformed values.
+// This is a typed-input resilience test using real WordPress functions.
+$malformed_shortcode_filter = static function ( $attributes ) {
+    $attributes['type'] = array( 'yearly' );
+    $attributes['before'] = array( '<svg onload=alert(1)>' );
+    $attributes['after'] = new stdClass();
+    $attributes['tag'] = array( 'script' );
+    $attributes['select_text'] = array( '<img src=x onerror=alert(1)>' );
+    $attributes['order'] = array( 'DESC' );
+    $attributes['limit'] = array( 2 );
+    return $attributes;
+};
+add_filter( 'shortcode_atts_archives', $malformed_shortcode_filter, 10, 1 );
+$filtered_error = '';
+try {
+    $filtered_shortcode = do_shortcode( '[chronoarchive type="yearly" limit="2"]' );
+} catch ( Throwable $exception ) {
+    $filtered_error = $exception->getMessage();
+    $filtered_shortcode = '';
+}
+remove_filter( 'shortcode_atts_archives', $malformed_shortcode_filter, 10 );
+$assert( 'Malformed shortcode filter values do not throw', '' === $filtered_error );
+$assert( 'Malformed filtered tag renders allowed container', 0 === strpos( trim( $filtered_shortcode ), '<ul>' ) );
+$assert( 'Filtered unsafe HTML cannot execute',
+    false === stripos( $filtered_shortcode, '<svg' ) &&
+    false === stripos( $filtered_shortcode, '<script' ) &&
+    false === stripos( $filtered_shortcode, 'onerror=' ) );
+$assert( 'Malformed filtered shortcode retains archive links', false !== strpos( $filtered_shortcode, '<a ' ) );
+
+$object_shortcode_filter = static function () { return new stdClass(); };
+add_filter( 'shortcode_atts_archives', $object_shortcode_filter, 10, 1 );
+$filtered_default = do_shortcode( '[archives type="yearly" limit="2"]' );
+remove_filter( 'shortcode_atts_archives', $object_shortcode_filter, 10 );
+$assert( 'Non-array attribute filter returns safe default archive',
+    0 === strpos( trim( $filtered_default ), '<ul>' ) && false !== strpos( $filtered_default, '<a ' ) );
+
 $select = do_shortcode( '[chronoarchive type="yearly" format="option" limit="2" select_text="Select archive"]' );
 $assert( 'Selector has accessible label', false !== strpos( $select, '<label' ) );
 $assert( 'No inline onchange', false === stripos( $select, 'onchange=' ) );
@@ -101,6 +137,32 @@ WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
 ) );
 $rendered_links = ob_get_clean();
 $assert( 'Direct API preserves sanitized LINK format', substr_count( $rendered_links, '<link' ) === 2 );
+// WordPress's get_archives_link filter may provide additional HTML. Its result
+// is untrusted for shortcode display, both when echoed and when returned.
+$malformed_archives_link = static function ( $link ) {
+    return $link . '<script>alert("archive")</script><img src=x onerror=alert(1)>';
+};
+add_filter( 'get_archives_link', $malformed_archives_link, 10, 1 );
+$filtered_markup = do_shortcode( '[chronoarchive type="yearly" limit="1"]' );
+$filtered_options = do_shortcode( '[chronoarchive type="yearly" format="option" limit="1"]' );
+$filtered_links = WP_Plugin_ChronoArchive::wp_get_archives_advanced(
+    array( 'type' => 'yearly', 'format' => 'link', 'limit' => 1, 'echo' => 0 )
+);
+remove_filter( 'get_archives_link', $malformed_archives_link, 10 );
+$assert( 'Returned archive HTML removes active filtered markup',
+    false === stripos( $filtered_markup, '<script' ) &&
+    false === stripos( $filtered_markup, 'onerror=' ) &&
+    false === stripos( $filtered_markup, 'onload=' ) &&
+    false !== strpos( $filtered_markup, '<a ' ) );
+$assert( 'Returned OPTION archive output preserves strict markup',
+    2 === substr_count( $filtered_options, '<option value=' ) &&
+    false === stripos( $filtered_options, '<img' ) &&
+    false === stripos( $filtered_options, '<script' ) );
+$assert( 'Returned LINK archive output strips filtered HTML tags',
+    1 === substr_count( $filtered_links, '<link' ) &&
+    false === stripos( $filtered_links, '<img' ) &&
+    false === stripos( $filtered_links, '<script' ) );
+
 $assert( 'Unknown post type returns empty entries', false === strpos(
     do_shortcode( '[chronoarchive type="yearly" post_type="missing_ca_type"]' ), '<a ' ) );
 
@@ -186,6 +248,61 @@ $widget_output = ob_get_clean();
 $assert( 'Classic widget renders archive links', false !== strpos( $widget_output, '<a ' ) );
 $assert( 'Trusted widget theme wrappers are preserved', false !== strpos( $widget_output, '<aside>' ) &&
     false !== strpos( $widget_output, '</aside>' ) );
+
+// WordPress's edit_css meta capability maps to unfiltered_html and is
+// restricted for multisite site administrators. Exercise both capability
+// paths using a temporary mapping filter on disposable CI only.
+$css_test_user = get_current_user_id();
+wp_set_current_user( 1 );
+$assert( 'Test administrator has edit_css privilege on a single site',
+    current_user_can( 'edit_css' ) );
+$approved_by_admin = $plugin_under_test->sanitize_settings( array(
+    'custom_css' => '.approved{color:blue}</style><script>bad</script>',
+    'use_cpt_archive' => '1',
+) );
+$assert( 'Authorized CSS settings receive explicit approval',
+    '1' === $approved_by_admin['custom_css_approved'] &&
+    false === strpos( $approved_by_admin['custom_css'], '<' ) );
+
+// Emulate the WP multisite subsite-admin permission boundary without
+// actually changing the user roles or network configuration.
+$deny_edit_css = static function ( $caps, $cap ) {
+    return 'edit_css' === $cap ? array( 'do_not_allow' ) : $caps;
+};
+update_option( 'WP_ChronoArchive_options', array(
+    'custom_css' => '.old{color:green}',
+    'use_cpt_archive' => '',
+) );
+add_filter( 'map_meta_cap', $deny_edit_css, 10, 2 );
+$assert( 'Site administrator may manage options without edit_css',
+    current_user_can( 'manage_options' ) && ! current_user_can( 'edit_css' ) );
+$blocked_css = $plugin_under_test->sanitize_settings( array(
+    'custom_css' => '.attacker{background:url(https://example.test/track)}',
+    'custom_css_approved' => '1',
+    'use_cpt_archive' => '1',
+) );
+$assert( 'Unprivileged CSS write and self-approval refused',
+    '.old{color:green}' === $blocked_css['custom_css'] &&
+    '' === $blocked_css['custom_css_approved'] &&
+    '1' === $blocked_css['use_cpt_archive'] );
+ob_start();
+$plugin_under_test->options_page();
+$read_only_css_admin = ob_get_clean();
+$assert( 'Restricted administrator sees disabled CSS editor',
+    false !== strpos( $read_only_css_admin, 'chronoarchive-custom-css' ) &&
+    false !== strpos( $read_only_css_admin, 'disabled=' ) );
+
+update_option( 'WP_ChronoArchive_options', $approved_by_admin );
+$unchanged_css = $plugin_under_test->sanitize_settings( array(
+    'custom_css' => '.overwrite{color:red}',
+    'use_cpt_archive' => '',
+) );
+$assert( 'Non-edit_css save preserves previously approved CSS',
+    $unchanged_css['custom_css'] === $approved_by_admin['custom_css'] &&
+    '1' === $unchanged_css['custom_css_approved'] );
+remove_filter( 'map_meta_cap', $deny_edit_css, 10 );
+delete_option( 'WP_ChronoArchive_options' );
+wp_set_current_user( $css_test_user );
 
 // Render administrator settings with a malicious historic textarea value.
 // WordPress esc_textarea() must keep the payload inside the textarea.
