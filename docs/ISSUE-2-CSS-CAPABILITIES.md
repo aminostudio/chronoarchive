@@ -34,7 +34,7 @@ This is a **policy mismatch in this fork's settings behavior**. No third-party e
 
 - PHP mock suite checks legacy unapproved CSS is suppressed in multisite mode; unprivileged writes cannot replace or approve it; authorized save approves it; subsequent ordinary settings saves cannot rewrite it.
 - Real WordPress matrix checks the core `edit_css` capability on a privileged single-site administrator and simulates a subsite-level restriction through `map_meta_cap`. The actual settings UI is inspected to ensure the field is disabled.
-- A **true multisite installation with network and subsite administrators** remains necessary before a stable release.
+- **Actual WordPress multisite** was provisioned in GitHub Actions with a network super administrator and a distinct subsite administrator. `tests/multisite-security.php` verified **14/14 assertions on WordPress 6.5.5/PHP 7.2 and 14/14 on WordPress latest/PHP 8.4**, including real permission differences, refusing CSS changes and forged approvals, disabling the CSS UI, authorizing CSS from super administrator, and preserving approval on later restricted saves. [Verified run #43432086459](https://github.com/aminostudio/chronoarchive/actions/runs/43432086459). This is a disposable CI network, not a production network test.
 - WordPress Plugin Check, browser network checks and a broader policy review remain release gates.
 
 ## Rollback and audit notes
