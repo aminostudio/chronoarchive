@@ -570,25 +570,35 @@ class WP_Plugin_ChronoArchive {
 			'post_type'       => 'post',
 			'use_cpt_archive' => $this->options['use_cpt_archive']
 		);
-		$atts = shortcode_atts( $defaults, $atts, 'archives' );
+		$atts = shortcode_atts( $defaults, is_array( $atts ) ? $atts : array(), 'archives' );
+		// shortcode_atts() exposes the shortcode_atts_archives filter. A
+		// third-party filter can return unexpected types, including arrays.
+		// Normalize every field before WordPress string/escaping functions.
+		$atts = is_array( $atts ) ? wp_parse_args( $atts, $defaults ) : $defaults;
+		foreach ( $defaults as $key => $default ) {
+			if ( ! is_scalar( $atts[ $key ] ) ) {
+				$atts[ $key ] = $default;
+			}
+			$atts[ $key ] = (string) $atts[ $key ];
+		}
 
 		$type            = sanitize_key( $atts['type'] );
 		$type            = in_array( $type, array( 'daily', 'weekly', 'monthly', 'yearly', 'decade', 'alpha', 'postbypost' ), true ) ? $type : 'yearly';
-		$limit           = ! empty( $atts['limit'] ) ? absint( $atts['limit'] ) : '';
+		$limit           = '' !== $atts['limit'] ? absint( $atts['limit'] ) : '';
 		$format          = sanitize_key( $atts['format'] );
 		$format          = in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
 		$before          = wp_kses_post( $atts['before'] );
 		$after           = wp_kses_post( $atts['after'] );
-		$show_post_count = in_array( strtolower( (string) $atts['show_post_count'] ), array( '1', 'true', 'yes', 'on' ), true )
-			|| in_array( strtolower( (string) $atts['showcount'] ), array( '1', 'true', 'yes', 'on' ), true ) ? 1 : 0;
+		$show_post_count = in_array( strtolower( $atts['show_post_count'] ), array( '1', 'true', 'yes', 'on' ), true )
+			|| in_array( strtolower( $atts['showcount'] ), array( '1', 'true', 'yes', 'on' ), true ) ? 1 : 0;
 		$tag             = sanitize_key( $atts['tag'] );
 		$tag             = in_array( $tag, array( 'ul', 'ol', 'div', 'nav', 'section', 'span' ), true ) ? $tag : 'ul';
-		$order           = ( strtoupper( $atts['order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
-		$alpha_order     = ( strtoupper( $atts['alpha_order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
-		$post_order      = ( strtoupper( $atts['post_order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
+		$order           = 'ASC' === strtoupper( $atts['order'] ) ? 'ASC' : 'DESC';
+		$alpha_order     = 'ASC' === strtoupper( $atts['alpha_order'] ) ? 'ASC' : 'DESC';
+		$post_order      = 'ASC' === strtoupper( $atts['post_order'] ) ? 'ASC' : 'DESC';
 		$select_text     = sanitize_text_field( $atts['select_text'] );
 		$post_type       = sanitize_key( $atts['post_type'] );
-		$use_cpt_archive = sanitize_text_field( $atts['use_cpt_archive'] );
+		$use_cpt_archive = '1' === $atts['use_cpt_archive'] ? '1' : '';
 
 		if ( $format == 'option' ) {
 			$dtitle = ! empty( $select_text )
