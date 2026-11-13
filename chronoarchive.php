@@ -55,6 +55,9 @@ class WP_Plugin_ChronoArchive {
 	 */
 	var $options = array(
 		'custom_css' => '',
+		// Explicitly approved by an edit_css-capable user. Legacy multisite
+		// values are not trusted implicitly when upgrading this plugin.
+		'custom_css_approved' => '',
 		'use_cpt_archive' => '',
 	);
 
@@ -212,6 +215,12 @@ class WP_Plugin_ChronoArchive {
 	 * No raw style elements are echoed by this plugin.
 	 */
 	function plugin_enqueue_styles() {
+		// Site administrators in a multisite network normally cannot use
+		// unfiltered CSS. Previously saved values must be approved again by
+		// a super admin before they can affect public output.
+		if ( is_multisite() && '1' !== $this->options['custom_css_approved'] ) {
+			return;
+		}
 		$css = self::safe_custom_css( $this->options['custom_css'] );
 		if ( '' === trim( $css ) ) {
 			return;
@@ -255,10 +264,29 @@ class WP_Plugin_ChronoArchive {
 	 */
 	function sanitize_settings( $input ) {
 		$input = is_array( $input ) ? $input : array();
-		$css = isset( $input['custom_css'] ) && is_string( $input['custom_css'] )
-			? wp_strip_all_tags( wp_unslash( $input['custom_css'] ) ) : '';
+		$previous = get_option( $this->options_name, array() );
+		$previous = is_array( $previous ) ? $previous : array();
+
+		// manage_options may be held by a multisite subsite administrator,
+		// who intentionally lacks the edit_css (unfiltered_html) capability.
+		// Preserve existing settings without allowing that user to replace
+		// arbitrary CSS or self-approve an untrusted legacy value.
+		if ( current_user_can( 'edit_css' ) ) {
+			$css = isset( $input['custom_css'] ) && is_string( $input['custom_css'] )
+				? substr( wp_strip_all_tags( wp_unslash( $input['custom_css'] ) ), 0, 20000 )
+				: '';
+			$approved = '1';
+		} else {
+			$css = isset( $previous['custom_css'] ) && is_string( $previous['custom_css'] )
+				? substr( $previous['custom_css'], 0, 20000 )
+				: '';
+			$approved = isset( $previous['custom_css_approved'] ) &&
+				'1' === $previous['custom_css_approved'] ? '1' : '';
+		}
+
 		return array(
 			'custom_css' => $css,
+			'custom_css_approved' => $approved,
 			'use_cpt_archive' => ! empty( $input['use_cpt_archive'] ) ? '1' : '',
 		);
 	}
@@ -553,7 +581,20 @@ class WP_Plugin_ChronoArchive {
 				echo wp_kses_post( $output );
 			}
 		} else {
-			return $output;
+			// Return-mode output is rendered by shortcodes and direct callers.
+			// Apply the same late-escaping policy as echo-mode, including markup
+			// modified by the WordPress get_archives_link filter.
+			if ( 'option' === $r['format'] ) {
+				return wp_kses( $output, array(
+					'option' => array( 'value' => true ),
+				) );
+			}
+			if ( 'link' === $r['format'] ) {
+				return wp_kses( $output, array(
+					'link' => array( 'rel' => true, 'title' => true, 'href' => true ),
+				) );
+			}
+			return wp_kses_post( $output );
 		}
 	}
 
@@ -583,25 +624,36 @@ class WP_Plugin_ChronoArchive {
 			'post_type'       => 'post',
 			'use_cpt_archive' => $this->options['use_cpt_archive']
 		);
-		$atts = shortcode_atts( $defaults, $atts, 'archives' );
+		$atts = shortcode_atts( $defaults, is_array( $atts ) ? $atts : array(), 'archives' );
+		// shortcode_atts() exposes the shortcode_atts_archives filter. A
+		// third-party filter can return unexpected types, including arrays.
+		// Normalize every field before WordPress string/escaping functions.
+		$atts = is_array( $atts ) ? wp_parse_args( $atts, $defaults ) : $defaults;
+		foreach ( $defaults as $key => $default ) {
+			if ( ! is_scalar( $atts[ $key ] ) ) {
+				$atts[ $key ] = $default;
+			}
+			$atts[ $key ] = (string) $atts[ $key ];
+		}
 
 		$type            = sanitize_key( $atts['type'] );
 		$type            = in_array( $type, array( 'daily', 'weekly', 'monthly', 'yearly', 'decade', 'alpha', 'postbypost' ), true ) ? $type : 'yearly';
-		$limit           = ! empty( $atts['limit'] ) ? absint( $atts['limit'] ) : '';
+		$limit           = '' !== $atts['limit'] ? absint( $atts['limit'] ) : '';
 		$format          = sanitize_key( $atts['format'] );
 		$format          = in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
 		$before          = wp_kses_post( $atts['before'] );
 		$after           = wp_kses_post( $atts['after'] );
-		$show_post_count = in_array( strtolower( (string) $atts['show_post_count'] ), array( '1', 'true', 'yes', 'on' ), true )
-			|| in_array( strtolower( (string) $atts['showcount'] ), array( '1', 'true', 'yes', 'on' ), true ) ? 1 : 0;
+		$show_post_count = in_array( strtolower( $atts['show_post_count'] ), array( '1', 'true', 'yes', 'on' ), true )
+			|| in_array( strtolower( $atts['showcount'] ), array( '1', 'true', 'yes', 'on' ), true ) ? 1 : 0;
 		$tag             = sanitize_key( $atts['tag'] );
 		$tag             = in_array( $tag, array( 'ul', 'ol', 'div', 'nav', 'section', 'span' ), true ) ? $tag : 'ul';
-		$order           = ( strtoupper( $atts['order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
-		$alpha_order     = ( strtoupper( $atts['alpha_order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
-		$post_order      = ( strtoupper( $atts['post_order'] ) === 'ASC' ) ? 'ASC' : 'DESC';
+		$order           = 'ASC' === strtoupper( $atts['order'] ) ? 'ASC' : 'DESC';
+		$alpha_order     = 'ASC' === strtoupper( $atts['alpha_order'] ) ? 'ASC' : 'DESC';
+		$post_order      = 'ASC' === strtoupper( $atts['post_order'] ) ? 'ASC' : 'DESC';
 		$select_text     = sanitize_text_field( $atts['select_text'] );
 		$post_type       = sanitize_key( $atts['post_type'] );
-		$use_cpt_archive = sanitize_text_field( $atts['use_cpt_archive'] );
+		// Preserve legacy truthy values accepted by the original shortcode.
+		$use_cpt_archive = '' !== $atts['use_cpt_archive'] && '0' !== $atts['use_cpt_archive'] ? '1' : '';
 
 		if ( $format == 'option' ) {
 			$dtitle = ! empty( $select_text )
@@ -697,9 +749,9 @@ class WP_Plugin_ChronoArchive {
 						<td>
 							<textarea id="chronoarchive-custom-css"
 								name="<?php echo esc_attr( $this->options_name ); ?>[custom_css]"
-								rows="7" cols="70" class="large-text code"><?php echo esc_textarea( $options['custom_css'] ); ?></textarea>
+								rows="7" cols="70" class="large-text code" <?php disabled( ! current_user_can( 'edit_css' ), true ); ?>><?php echo esc_textarea( $options['custom_css'] ); ?></textarea>
 							<p class="description">
-								<?php esc_html_e( 'Custom CSS is output through the WordPress Styles API. Restrict this setting to trusted administrators.', 'ChronoArchive' ); ?>
+								<?php esc_html_e( 'Only users with the WordPress edit_css capability may change custom CSS. Previously saved multisite CSS requires approval by an authorized administrator.', 'ChronoArchive' ); ?>
 							</p>
 						</td>
 					</tr>
@@ -749,6 +801,9 @@ class WP_Plugin_ChronoArchive {
 			is_string( $saved_options['custom_css'] )
 			? substr( $saved_options['custom_css'], 0, 20000 )
 			: '';
+		$this->options['custom_css_approved'] = isset( $saved_options['custom_css_approved'] ) &&
+			is_string( $saved_options['custom_css_approved'] ) &&
+			'1' === $saved_options['custom_css_approved'] ? '1' : '';
 		$this->options['use_cpt_archive'] = ! empty( $saved_options['use_cpt_archive'] ) &&
 			is_scalar( $saved_options['use_cpt_archive'] )
 			? '1'
