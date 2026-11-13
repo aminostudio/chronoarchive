@@ -553,7 +553,20 @@ class WP_Plugin_ChronoArchive {
 				echo wp_kses_post( $output );
 			}
 		} else {
-			return $output;
+			// Return-mode output is rendered by shortcodes and direct callers.
+			// Apply the same late-escaping policy as echo-mode, including markup
+			// modified by the WordPress get_archives_link filter.
+			if ( 'option' === $r['format'] ) {
+				return wp_kses( $output, array(
+					'option' => array( 'value' => true ),
+				) );
+			}
+			if ( 'link' === $r['format'] ) {
+				return wp_kses( $output, array(
+					'link' => array( 'rel' => true, 'title' => true, 'href' => true ),
+				) );
+			}
+			return wp_kses_post( $output );
 		}
 	}
 
