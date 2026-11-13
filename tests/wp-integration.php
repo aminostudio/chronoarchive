@@ -119,6 +119,8 @@ $decade_query = new WP_Query();
 $GLOBALS['wp_the_query'] = $decade_query;
 $decade_query->parse_query( array( 'year' => 2010, 'decade' => '2010' ) );
 $plugin_under_test->ChronoArchive_decade_filter( $decade_query );
+// Verify the entire decade, not just WordPress's default 10-post page.
+$decade_query->set( 'posts_per_page', -1 );
 $decade_posts = $decade_query->get_posts();
 $assert( 'Valid decade query includes at least ten posts', count( $decade_posts ) >= 10 );
 $years_found = array_map( static function( $post ) { return (int) substr( $post->post_date, 0, 4 ); }, $decade_posts );
