@@ -1,0 +1,49 @@
+name: Static checks
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  php-lint:
+    name: PHP syntax (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.2', '8.2', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          tools: none
+          coverage: none
+      - name: Lint PHP files
+        shell: bash
+        run: |
+          test -f chronoarchive.php || exit 1
+          find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+
+  javascript-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          test -f chronoarchive.php || exit 1
+          find assets js -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
+
+  release-metadata:
+    name: WordPress.org metadata (intentionally blocked on LAB beta)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check WordPress release metadata
+        run: python3 scripts/check-release-metadata.py

@@ -1,0 +1,11 @@
+/vendor/
+/node_modules/
+/.phpunit.result.cache
+/.phpunit-wp-tests/
+/.phpcs-cache
+/.idea/
+/.vscode/
+*.log
+*.zip
+.DS_Store
+Thumbs.db
