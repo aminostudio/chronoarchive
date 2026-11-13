@@ -75,6 +75,7 @@ function shortcode_atts( $defaults, $attributes, $tag = '' ) {
 function sanitize_key( $text ) {
     return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $text ) );
 }
+function absint( $value ) { return abs( (int) $value ); }
 function sanitize_text_field( $text ) { return strip_tags( (string) $text ); }
 function wp_strip_all_tags( $text ) { return strip_tags( (string) $text ); }
 function wp_kses_post( $text ) {
