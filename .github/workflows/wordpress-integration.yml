@@ -101,16 +101,22 @@ jobs:
             sleep 0.5
           done
 
-          week_url='http://127.0.0.1:8093/2019/?chrono_week=2019-12-30'
+          week_url='http://127.0.0.1:8093/?year=2019&chrono_week=2019-12-30'
           week_code=$(curl --silent --show-error --max-time 20 \
             --output /tmp/chrono-week.html --write-out '%{http_code}' "$week_url")
           echo "Cross-year weekly archive HTTP status: $week_code"
           test "$week_code" = 200
-          grep -Fq 'CA HTTP Boundary Dec' /tmp/chrono-week.html
+          if ! grep -Fq 'CA HTTP Boundary Dec' /tmp/chrono-week.html; then
+            echo 'FAIL: December fixture not found in HTTP archive response'
+            echo 'Response title and body excerpt:'
+            grep -Eo '<title>[^<]*</title>' /tmp/chrono-week.html | head -3 || true
+            sed 's/<[^>]*>/ /g' /tmp/chrono-week.html | head -c 1200 || true
+            exit 1
+          fi
           grep -Fq 'CA HTTP Boundary Jan' /tmp/chrono-week.html
           echo 'PASS: cross-year week contains the Dec and Jan articles'
 
-          invalid_url='http://127.0.0.1:8093/2024/?chrono_week=2024-02-31'
+          invalid_url='http://127.0.0.1:8093/?year=2024&chrono_week=2024-02-31'
           invalid_code=$(curl --silent --show-error --max-time 20 \
             --output /tmp/chrono-invalid.html --write-out '%{http_code}' "$invalid_url")
           echo "Invalid week HTTP status: $invalid_code"
