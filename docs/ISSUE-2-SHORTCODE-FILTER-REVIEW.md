@@ -20,14 +20,14 @@ There is no claim that every filtered input is attacker-controlled: third-party 
 
 ## Evidence
 
-Five new isolated tests supply arrays/objects for every attribute via the `shortcode_atts_archives` filter. They verify:
+Seven new isolated tests cover malformed arrays/objects in each attribute and a completely non-array `shortcode_atts_archives` filter return. They verify:
 - No PHP warning or exception.
 - Invalid `tag` falls back to a safe `<ul>`.
 - No `<img>` or `<script>` escapes into rendered HTML.
 - Yearly archive output remains available.
 - The existing tests cover the direct API, widget wrappers, query-var scoping and malformed decades.
 
-**Current mock suite:** 16 assertions, run on PHP 7.2 / 8.2 / 8.4 in GitHub Actions. Browser integration and role-based testing have not been run for this patch.
+**Current mock suite:** 18 assertions, run on PHP 7.2 / 8.2 / 8.4 in GitHub Actions. Browser integration and role-based testing have not been run for this patch.
 
 ## Original Annual Archive advisory cross-check
 
