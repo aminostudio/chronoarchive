@@ -11,6 +11,8 @@ define( 'ABSPATH', '/' );
 $GLOBALS['ca_mock_filters'] = array();
 $GLOBALS['ca_mock_options'] = array();
 $GLOBALS['ca_fake_query'] = '';
+$GLOBALS['ca_mock_multisite'] = false;
+$GLOBALS['ca_mock_edit_css'] = true;
 
 class WP_Widget {
     public $id_base = 'chronoarchive_widget';
@@ -48,6 +50,8 @@ class CA_Fake_DB {
 }
 $GLOBALS['wpdb'] = new CA_Fake_DB();
 
+function is_multisite() { return $GLOBALS['ca_mock_multisite']; }
+function current_user_can( $cap ) { return 'edit_css' === $cap && $GLOBALS['ca_mock_edit_css']; }
 function sanitize_text_field( $value ) { return strip_tags( (string) $value ); }
 function get_option( $name, $default = false ) {
     return isset( $GLOBALS['ca_mock_options'][ $name ] ) ? $GLOBALS['ca_mock_options'][ $name ] : $default;
@@ -221,6 +225,57 @@ $widget->widget( array( 'before_widget' => '<aside>' ), array( 'type' => 'yearly
 $filtered_widget_html = ob_get_clean();
 ca_assert( 'Malformed wrapper filter is ignored', false === strpos( $filtered_widget_html, 'Array' ) && false !== strpos( $filtered_widget_html, '2026' ) );
 unset( $GLOBALS['ca_mock_filters']['widget_before'] );
+
+// WordPress treats unfiltered CSS as a privileged capability, notably on
+// multisite subsites. No legacy CSS should be rendered without reapproval.
+$GLOBALS['ca_mock_multisite'] = true;
+$GLOBALS['ca_mock_options']['WP_ChronoArchive_options'] = array(
+    'custom_css' => '.legacy { background:url(https://external.example/image) }',
+    'use_cpt_archive' => '1',
+);
+$WP_Plugin_ChronoArchive->_set_options();
+$GLOBALS['ca_styles'] = array( 'registered' => array(), 'enqueued' => array(), 'css' => array() );
+$WP_Plugin_ChronoArchive->plugin_enqueue_styles();
+ca_assert( 'Multisite legacy CSS is not rendered without approval',
+    empty( $GLOBALS['ca_styles']['css'] ) );
+
+$GLOBALS['ca_mock_edit_css'] = false;
+$denied_css = $WP_Plugin_ChronoArchive->sanitize_settings( array(
+    'custom_css' => '.changed { color:red }',
+    'use_cpt_archive' => '1',
+) );
+ca_assert( 'Non-edit_css user cannot overwrite CSS', 
+    $denied_css['custom_css'] === $GLOBALS['ca_mock_options']['WP_ChronoArchive_options']['custom_css'] );
+ca_assert( 'Non-edit_css user cannot approve legacy CSS',
+    '' === $denied_css['custom_css_approved'] );
+ca_assert( 'Non-edit_css user may still update non-CSS settings',
+    '1' === $denied_css['use_cpt_archive'] );
+
+$GLOBALS['ca_mock_edit_css'] = true;
+$approved_css = $WP_Plugin_ChronoArchive->sanitize_settings( array(
+    'custom_css' => '.approved{color:blue}</style><script>alert(1)</script>',
+    'use_cpt_archive' => '1',
+) );
+ca_assert( 'Edit_css user may authorize a sanitized stylesheet',
+    '1' === $approved_css['custom_css_approved'] &&
+    false === strpos( $approved_css['custom_css'], '<' ) );
+$GLOBALS['ca_mock_options']['WP_ChronoArchive_options'] = $approved_css;
+$WP_Plugin_ChronoArchive->_set_options();
+$GLOBALS['ca_styles'] = array( 'registered' => array(), 'enqueued' => array(), 'css' => array() );
+$WP_Plugin_ChronoArchive->plugin_enqueue_styles();
+ca_assert( 'Approved multisite CSS is enqueued',
+    count( $GLOBALS['ca_styles']['css'] ) === 1 );
+
+$GLOBALS['ca_mock_edit_css'] = false;
+$unchanged = $WP_Plugin_ChronoArchive->sanitize_settings( array(
+    'custom_css' => '.modified{color:red}',
+    'use_cpt_archive' => '',
+) );
+ca_assert( 'Later unprivileged save preserves trusted CSS and approval',
+    $unchanged['custom_css'] === $approved_css['custom_css'] &&
+    '1' === $unchanged['custom_css_approved'] );
+$GLOBALS['ca_mock_multisite'] = false;
+$GLOBALS['ca_mock_edit_css'] = true;
 
 echo "\nMock security checks: {$passes} passed, {$fails} failed.\n";
 exit( $fails ? 1 : 0 );
