@@ -284,6 +284,7 @@ class WP_Plugin_ChronoArchive {
 		$r['format'] = in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
 		$r['before'] = wp_kses_post( is_scalar( $r['before'] ) ? (string) $r['before'] : '' );
 		$r['after'] = wp_kses_post( is_scalar( $r['after'] ) ? (string) $r['after'] : '' );
+		$r['order'] = 'ASC' === strtoupper( is_string( $r['order'] ) ? $r['order'] : '' ) ? 'ASC' : 'DESC';
 		$r['alpha_order'] = 'DESC' === strtoupper( is_string( $r['alpha_order'] ) ? $r['alpha_order'] : '' ) ? 'DESC' : 'ASC';
 		$r['post_order'] = 'ASC' === strtoupper( is_string( $r['post_order'] ) ? $r['post_order'] : '' ) ? 'ASC' : 'DESC';
 		$r['limit'] = is_scalar( $r['limit'] ) ? $r['limit'] : '';
