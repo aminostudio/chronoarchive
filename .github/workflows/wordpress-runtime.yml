@@ -1,0 +1,38 @@
+name: WordPress runtime (security)
+
+on:
+  push:
+    branches:
+      - 'security/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  wordpress-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout plugin branch
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install WordPress environment
+        run: npm install --global @wordpress/env
+      - name: Start disposable WordPress + MySQL
+        run: wp-env start
+      - name: Verify plugin active
+        run: wp-env run cli wp plugin status chronoarchive
+      - name: Real WordPress security integration checks
+        run: wp-env run cli wp eval-file wp-content/plugins/chronoarchive/tests/wp-security-integration.php
+      - name: Install official WordPress Plugin Check
+        run: wp-env run cli wp plugin install plugin-check --activate
+      - name: Plugin Check audit (findings are tracked; not a release gate yet)
+        continue-on-error: true
+        run: wp-env run cli wp plugin check chronoarchive --format=table
+      - name: Stop disposable environment
+        if: always()
+        run: wp-env stop
