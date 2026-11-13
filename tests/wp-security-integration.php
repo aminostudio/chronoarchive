@@ -72,6 +72,9 @@ try {
         false !== strpos( $select, '<label' ) &&
         false !== strpos( $select, '<select' ) &&
         false === stripos( $select, 'onchange=' ) );
+    $check( 'HTML safety boundary preserves archive options',
+        false !== strpos( $select, '<option value=' ) &&
+        false !== strpos( $select, '>1999<' ) );
 
     $prefix = do_shortcode( '[chronoarchive type="yearly" limit="2" before="<svg onload=alert(1)>" after="<img src=x onerror=alert(1)>"]' );
     $check( 'WordPress KSES removes disallowed elements and event handlers',
