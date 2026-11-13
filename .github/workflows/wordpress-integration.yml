@@ -66,5 +66,5 @@ jobs:
         run: |
           set -euo pipefail
           php /tmp/wp-cli.phar eval-file \
-            wp-content/plugins/chronoarchive/tests/wp-integration.php \
+            /tmp/chrono-wp/wp-content/plugins/chronoarchive/tests/wp-integration.php \
             --path=/tmp/chrono-wp
