@@ -663,102 +663,59 @@ class WP_Plugin_ChronoArchive {
 	 * Options page callback.
 	 */
 	function options_page() {
+		// The settings page must never render for unprivileged users, even when
+		// invoked directly outside its capability-gated admin_menu registration.
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		$like_it_arr = array(
-			__( 'really tied the room together', 'ChronoArchive' ),
-			__( 'made you feel all warm and fuzzy on the inside', 'ChronoArchive' ),
-			__( 'restored your faith in humanity... even if only for a fleeting second', 'ChronoArchive' ),
-			__( 'rocked your world', 'ChronoArchive' ),
-			__( 'inspired you to commit a random act of kindness', 'ChronoArchive' ),
-			__( 'encouraged more regular flossing of the teeth', 'ChronoArchive' ),
-			__( 'helped organize your life in the small ways that matter', 'ChronoArchive' ),
-			__( 'saved your minutes--if not tens of minutes--writing your own solution', 'ChronoArchive' ),
-			__( 'brightened your day... or darkened if you are trying to sleep in', 'ChronoArchive' ),
-			__( 'caused you to dance a little jig of joy and joyousness', 'ChronoArchive' ),
-			__( 'inspired you to tweet a little @twinpictues social love', 'ChronoArchive' ),
-			__( 'tasted great, while also being less filling', 'ChronoArchive' ),
-			__( 'caused you to shout: "everybody spread love, give me some mo!"', 'ChronoArchive' ),
-			__( 'helped you keep the funk alive', 'ChronoArchive' ),
-			__( '<a href="https://www.youtube.com/watch?v=dvQ28F5fOdU" target="_blank">soften hands while you do dishes</a>', 'ChronoArchive' ),
-			__( 'helped that little old lady <a href="https://www.youtube.com/watch?v=Ug75diEyiA0" target="_blank">find the beef</a>', 'ChronoArchive' )
-		);
-		$rand_key = array_rand( $like_it_arr );
-		$like_it = $like_it_arr[ $rand_key ];
+		$this->_set_options();
+		$options = $this->options;
 		?>
 		<div class="wrap">
-			<h2><?php echo $this->plugin_name; ?></h2>
-		</div>
-
-		<div class="postbox-container metabox-holder meta-box-sortables" style="width: 69%">
-			<div style="margin:0 5px;">
-				<div class="postbox">
-					<div class="handlediv" title="<?php _e( 'Click to toggle', 'ChronoArchive' ); ?>"><br/></div>
-					<h3 class="handle"><?php _e( 'ChronoArchive Settings', 'ChronoArchive' ); ?></h3>
-					<div class="inside">
-						<form method="post" action="options.php">
-							<?php
-								settings_fields( $this->domain );
-								$this->_set_options();
-								$options = $this->options;
-							?>
-
-							<fieldset class="options">
-								<table class="form-table">
-									<tr>
-										<th><?php _e( 'Custom Style', 'ChronoArchive' ); ?>:</th>
-										<td>
-											<label>
-												<textarea id="<?php echo $this->options_name; ?>[custom_css]" name="<?php echo $this->options_name; ?>[custom_css]" style="width: 100%; height: 150px;"><?php echo esc_attr( $options['custom_css'] ); ?></textarea>
-												<br /><span class="description"><?php _e( 'Custom CSS style for ultimate flexibility', 'ChronoArchive' ); ?></span>
-											</label>
-										</td>
-									</tr>
-									<tr>
-										<th><?php _e( 'CPT Archive Permalinks', 'ChronoArchive' ); ?>:</th>
-										<td>
-											<label>
-												<input type="checkbox" id="use_cpt_archive" name="<?php echo esc_attr( $this->options_name ); ?>[use_cpt_archive]" value="1" <?php echo checked( $options['use_cpt_archive'], 1 ); ?> /> <?php _e( 'Use CPT Archive Permalinks', 'ChronoArchive' ); ?>
-												<br /><span class="description"><?php printf( __( 'Use %sget_post_type_archive_link%s to generate the permalink for custom post type archives.', 'ChronoArchive' ), '<a href="https://developer.wordpress.org/reference/functions/get_post_type_archive_link/" target="_blank">', '</a>' ); ?></span>
-											</label>
-										</td>
-									</tr>
-									<tr>
-										<th><?php _e( 'Level Up!', 'ChronoArchive' ); ?>:</th>
-										<td>
-											<p><?php printf( __( '%sArchive-Pro-Matic%s offers advanced features such as archives by quarter, season, and multiple categories, along with very high-level personal support.', 'ChronoArchive' ), '<a href="https://pluginoven.com/premium-plugins/archive-pro-matic/?utm_source=ChronoArchive&utm_medium=plugin-settings-page&utm_content=archive-pro-matic&utm_campaign=archive-pro-level-up">', '</a>' ); ?></p>
-										</td>
-									</tr>
-								</table>
-							</fieldset>
-
-							<p class="submit" style="margin-bottom: 20px;">
-								<input class="button-primary" type="submit" value="<?php _e( 'Save Changes', 'ChronoArchive' ); ?>" style="float: right;" />
+			<h1><?php echo esc_html( $this->plugin_name ); ?></h1>
+			<p><?php esc_html_e( 'Display chronological archives with shortcodes or a classic widget.', 'ChronoArchive' ); ?></p>
+			<form method="post" action="options.php">
+				<?php settings_fields( $this->domain ); ?>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row">
+							<label for="chronoarchive-custom-css"><?php esc_html_e( 'Custom CSS', 'ChronoArchive' ); ?></label>
+						</th>
+						<td>
+							<textarea id="chronoarchive-custom-css"
+								name="<?php echo esc_attr( $this->options_name ); ?>[custom_css]"
+								rows="7" cols="70" class="large-text code"><?php echo esc_textarea( $options['custom_css'] ); ?></textarea>
+							<p class="description">
+								<?php esc_html_e( 'Custom CSS is output through the WordPress Styles API. Restrict this setting to trusted administrators.', 'ChronoArchive' ); ?>
 							</p>
-						</form>
-					</div>
-				</div>
-			</div>
-		</div>
-
-		<div class="postbox-container side metabox-holder meta-box-sortables" style="width:29%;">
-			<div style="margin:0 5px;">
-				<div class="postbox">
-					<div class="handlediv" title="<?php _e( 'Click to toggle', 'ChronoArchive' ); ?>"><br/></div>
-					<h3 class="handle"><?php _e( 'About', 'ChronoArchive' ); ?></h3>
-					<div class="inside">
-						<h4><?php echo $this->plugin_name; ?> <?php _e( 'Version', 'ChronoArchive' ); ?> <?php echo $this->version; ?></h4>
-						<p><?php printf( __( 'A complete listing of shortcode options and attribute demos is available, as well as free, open-source community support. ChronoArchive is a fork of the Annual Archive plugin originally developed by Twinpictures and distributed under the GPL.', 'ChronoArchive' ) ); ?></p>
-						<ul>
-							<li><?php printf( __( '%sDetailed documentation%s, complete with working demonstrations of all shortcode attributes, is available for your instructional enjoyment.', 'ChronoArchive' ), '<a href="https://pluginoven.com/plugins/annual-archive/documentation/" target="_blank">', '</a>' ); ?></li>
-							<li><?php printf( __( 'If you enjoy this plugin, please consider %ssharing your story%s with others.', 'ChronoArchive' ), '<a href="https://wordpress.org/support/plugin/anual-archive/reviews/" target="_blank">', '</a>' ); ?></li>
-							<li><?php printf( __( 'Your %sreviews%s, %sbug reports, feedback%s and %scocktail recipes%s are always welcomed.', 'ChronoArchive' ), '<a href="https://wordpress.org/support/plugin/anual-archive/reviews/">', '</a>', '<a href="https://wordpress.org/support/plugin/anual-archive/">', '</a>', '<a href="https://www.facebook.com/twinpictures">', '</a>' ); ?></li>
-						</ul>
-					</div>
-				</div>
-			</div>
-			<div class="clear"></div>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Custom post type archive links', 'ChronoArchive' ); ?></th>
+						<td>
+							<label for="chronoarchive-cpt-archive">
+								<input type="checkbox" id="chronoarchive-cpt-archive"
+									name="<?php echo esc_attr( $this->options_name ); ?>[use_cpt_archive]"
+									value="1" <?php checked( $options['use_cpt_archive'], '1' ); ?> />
+								<?php esc_html_e( 'Prefer registered custom post type archive URLs when available', 'ChronoArchive' ); ?>
+							</label>
+							<p class="description"><?php esc_html_e( 'Post types without a public archive base fall back to the normal WordPress archive URL with a post_type parameter.', 'ChronoArchive' ); ?></p>
+						</td>
+					</tr>
+				</table>
+				<?php submit_button(); ?>
+			</form>
+			<p class="description">
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: %s: plugin version. */
+						__( 'ChronoArchive %s. Fork of Annual Archive by Twinpictures, distributed under the GPL.', 'ChronoArchive' ),
+						$this->version
+					)
+				);
+				?>
+			</p>
 		</div>
 		<?php
 	}
