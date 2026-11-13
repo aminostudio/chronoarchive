@@ -26,6 +26,8 @@ jobs:
         run: |
           test -f chronoarchive.php || exit 1
           find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+      - name: Mock security regression tests
+        run: php tests/security-smoke.php
 
   javascript-syntax:
     runs-on: ubuntu-latest
