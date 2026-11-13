@@ -46,7 +46,7 @@ The plugin prepares post-type input and limits SQL sort directions, but `getarch
 
 ### Real WordPress / MariaDB 11
 
-`tests/wp-integration.php`: **47/47 assertions successful in each environment** in the four-cell WordPress/PHP matrix: WordPress 6.5.5 with PHP 7.2 and 8.2, and WordPress 7.1.4 with PHP 8.2 and 8.4 (188 test assertions). [Verified minimum-version matrix](https://github.com/aminostudio/chronoarchive/actions/runs/43374651359). Subsequent widget output escaping is tested by the same matrix; retain version-specific result links in the PR.
+`tests/wp-integration.php`: **55/55 assertions successful in each environment** in the four-cell WordPress/PHP matrix: WordPress 6.5.5 with PHP 7.2 and 8.2, and WordPress 7.1.4 with PHP 8.2 and 8.4 (**220 test assertions**). [Verified extended matrix, run #43375610692](https://github.com/aminostudio/chronoarchive/actions/runs/43375610692). This includes late escaping for option/link formats, malformed weekly archive dates and invalid decade query results.
 
 The suite creates 30 synthetic dated posts (1997–2026), inserts the 2019-12-31 / 2020-01-01 boundary cases, and tests:
 
@@ -67,13 +67,13 @@ The first integration test revealed output during `wp plugin activate` from a tr
 
 ### Plugin Check status
 
-An automated [official WordPress Plugin Check](https://github.com/WordPress/plugin-check-action) workflow now scans this repository, annotates errors and uploads its complete JSON findings. Its **initial scan was red** with **163 findings** across the inherited beta source; after replacing the unsafe legacy settings UI with an escaped WordPress Settings API form, a subsequent scan reported **105 findings**. Recent widget escaping improvements are undergoing a follow-up scan, so 105 is a dated checkpoint, **not** a claim that the current branch has exactly 105 findings.
+An automated [official WordPress Plugin Check](https://github.com/WordPress/plugin-check-action) workflow scans this repository, annotates errors and uploads the findings artifact. It measured **163 findings** on the inherited beta, **105** after replacing the legacy admin settings UI, **74** after widget output escaping, and **71** after hardening direct HTML output and removing discouraged stripping calls ([verified run #43375281884](https://github.com/aminostudio/chronoarchive/actions/runs/43375281884)). These are dated checkpoints, not a security certification; the job remains red due to unresolved metadata and SQL findings.
 
-Triage by category (at the 105-finding checkpoint):
-- **#3, metadata and internationalization:** 48 incorrect text-domain findings, a missing translator comment, readme tags/description warnings and a discouraged translation loading call.
-- **#2, output security:** 18 non-escaped output and 14 unsafe printing warnings/errors (many from the inherited classic widget, which has since been hardened).
-- **#4, database/performance:** six direct SQL warnings, six missing direct prepare hints and six database parameter warnings. The code currently composes a trusted table identifier and allowlisted SQL fragments around a prepared post-type `WHERE` clause; this requires code review and a strict SQL-mode compatibility test rather than blindly suppressing the warnings.
-- **Other:** two `strip_tags()` discouraged findings and one unexpected NOTICE.md in the plugin distribution root.
+Triage at the **71-finding checkpoint**:
+- **#2:** 0 remaining `WordPress.Security.EscapeOutput.*` findings **detected by Plugin Check**, compared with 32 at an earlier checkpoint. This is not proof that all XSS vectors have been fixed.
+- **#3, i18n / distribution:** 48 text-domain mismatches, one discouraged manual text-domain loader, one missing translator comment, two readme parser warnings, one `NOTICE.md` warning (upstream licensing notices must be retained when repackaging).
+- **#4, database / query:** six `PluginCheck.Security.DirectDB.UnescapedDBParameter` errors, six `WordPress.DB.PreparedSQL.NotPrepared` errors, and six direct-query warnings. The post-type condition is prepared, with allowlisted sort and numeric limits; trusted PHP filters may extend `JOIN` and `WHERE`. Review with actual SQL and eliminate scanner findings through safe construction rather than blind suppressions.
+- **Total:** 0 output-escaping observations + 53 metadata/distribution observations + 18 SQL observations = **71**.
 
 WordPress.org release metadata gate intentionally fails on the old plugin header/readme, tracked in [#3](https://github.com/aminostudio/chronoarchive/issues/3). **No release permitted while critical findings remain.**
 
@@ -82,8 +82,8 @@ WordPress.org release metadata gate intentionally fails on the old plugin header
 - [ ] Reproduce / map each upstream CVE against the full historical 1.6.0 source, including stored XSS variants. Do not claim all CVEs fixed without the evidence.
 - [ ] Review the official Plugin Check output, resolve security findings and clearly route non-security issues to #3/#4.
 - [ ] Reproduce historical and multisite options behavior with actual sites and capability matrices; test admin editor with malicious preexisting option values.
-- [ ] Verify all generated links and negative URL paths through a browser HTTP session, including malformed `chrono_week`, archives and 404s.
-- [ ] Test the minimum claimed WordPress/PHP combinations and alternate themes.
+- [ ] Verify all generated links and negative URL paths through a browser HTTP session, including malformed `chrono_week`, archives and 404s. The CI suite exercises malformed values at the real WordPress WP_Query layer, but is not a full browser test.
+- [x] Test the minimum claimed WordPress/PHP combinations: WordPress 6.5.5 / PHP 7.2, WordPress 6.5.5 / PHP 8.2, WordPress 7.1.4 / PHP 8.2 and WordPress 7.1.4 / PHP 8.4. All 55 assertions pass per environment on run #43375610692. **Alternate theme and multisite tests remain pending.**
 - [ ] Review escaping of administrator-facing markup, JS accessibility and the exact plugin distribution ZIP.
 - [ ] Perform a direct LAB file export to confirm byte-exact provenance of the imported baseline.
 
