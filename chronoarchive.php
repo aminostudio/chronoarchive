@@ -531,14 +531,27 @@ class WP_Plugin_ChronoArchive {
 				foreach ( (array) $results as $result ) {
 					if ( $result->post_date != '0000-00-00 00:00:00' ) {
 						$url = get_permalink( (int) $result->ID );
-						$text = $result->post_title ? strip_tags( apply_filters( 'the_title', $result->post_title, $result->ID ) ) : $result->ID;
+						$filtered_title = $result->post_title ? apply_filters( 'the_title', $result->post_title, $result->ID ) : $result->ID;
+						$text = is_scalar( $filtered_title ) ? wp_strip_all_tags( (string) $filtered_title ) : (string) $result->ID;
 						$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
 					}
 				}
 			}
 		}
 		if ( $r['echo'] ) {
-			echo $output;
+			// Archive links originate from WordPress get_archives_link(), but
+			// different formats require distinct HTML allowlists at the sink.
+			if ( 'option' === $r['format'] ) {
+				echo wp_kses( $output, array(
+					'option' => array( 'value' => true ),
+				) );
+			} elseif ( 'link' === $r['format'] ) {
+				echo wp_kses( $output, array(
+					'link' => array( 'rel' => true, 'title' => true, 'href' => true ),
+				) );
+			} else {
+				echo wp_kses_post( $output );
+			}
 		} else {
 			return $output;
 		}
@@ -902,7 +915,7 @@ class ChronoArchive_Widget extends WP_Widget {
 		$format = self::legacy_text( $instance, 'format' );
 		$before = self::legacy_text( $instance, 'before' );
 		$after = self::legacy_text( $instance, 'after' );
-		$type = strip_tags( self::legacy_text( $instance, 'type' ) );
+		$type = wp_strip_all_tags( self::legacy_text( $instance, 'type' ) );
 		$limit = self::legacy_text( $instance, 'limit' );
 		$post_type = self::legacy_text( $instance, 'post_type', 'post' );
 		$order = self::legacy_text( $instance, 'order', 'DESC' );
