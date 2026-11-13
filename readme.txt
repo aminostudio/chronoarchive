@@ -1,7 +1,6 @@
 === ChronoArchive ===
-Contributors: aminostudio, twinpictures, baden03
-Donate link: https://aminostudio.fr/donate/
-Tags: archive, archives, daily, weekly, monthly, yearly, decade, shortcode, widget, chronoarchive
+Contributors: aminostudio
+Tags: archives, shortcode, widget, date archives, custom post types
 Requires at least: 6.5
 Tested up to: 7.1
 Stable tag: 2.1.0-beta1
@@ -9,185 +8,100 @@ Requires PHP: 7.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Description
------------
-ChronoArchive is a rebranded and improved version of the original Annual Archive plugin by Twinpictures. It displays daily, weekly, monthly, yearly, and decade archives as well as post-by-post and alpha archives via a simple shortcode or a sidebar widget. The 2.1 beta improves calendar-week archives, CPT URL fallback, and accessible dropdown navigation. This is a LAB/testing build; production compatibility is not yet confirmed.
+Browse WordPress posts by year, month, week, day or decade, with shortcodes and a classic widget. Independent fork of Annual Archive.
 
-Installation
-------------
-1. Upload the `chronoarchive` folder to your `/wp-content/plugins/` directory via FTP.
-2. Activate the plugin through the WordPress Plugins menu.
-3. Configure the plugin settings via the ChronoArchive options page.
-4. Add the ChronoArchive widget to your sidebar or use the provided shortcode in your posts/pages.
-5. Test all archive links and layouts before using on a live site.
+== Description ==
 
-Frequently Asked Questions
---------------------------
-= What are the shortcode options? =
-A complete list of shortcode options and demos is provided in the documentation:
-https://aminostudio.fr/chronoarchive/documentation/
+**Development beta: not yet recommended for production sites.**
 
-= Where can I leave feedback, bug reports, or request features? =
-You can leave your feedback on the support forum on WordPress.org or contact us directly via https://aminostudio.fr
+ChronoArchive creates chronological archive lists for WordPress posts and supported public custom post types. It is an independently maintained, GPL-licensed fork of *Annual Archive* by Twinpictures and its contributors.
 
-= How can I translate this plugin into my language? =
-Use the open community translation tool available at:
-https://translate.wordpress.org/projects/wp-plugins/chronoarchive
+Supported archive modes:
 
-= Do you have a Facebook page? =
-Yes, follow Amino Studio on Facebook at:
-https://www.facebook.com/aminostudio
+* Yearly, monthly, weekly and daily archives.
+* Decade archives with explicit year ranges.
+* Alphabetical and post-by-post archive lists.
+* A dropdown selector or regular archive links.
+* A classic WordPress widget and the Shortcode block.
 
-= Does Amino Studio have a Twitter account? =
-Yes, follow us on Twitter: @aminostudio
-https://twitter.com/aminostudio
+The recommended shortcode is `[chronoarchive]`. The historical `[archives]` and `[arcpromat]` aliases remain available for compatibility.
 
-= Why the new name ChronoArchive? =
-The new name reflects the plugin's enhanced focus on time-based archives and a modern approach, along with significant security and code improvements.
+Examples:
 
-== Screenshots ==
-1. ChronoArchive widget settings page.
-2. Sidebar widget displaying daily archives.
-3. Sidebar widget displaying weekly archives.
-4. Sidebar widget displaying monthly archives.
-5. Sidebar widget displaying yearly archives.
-6. Sidebar widget displaying post-by-post archives.
-7. Sidebar widget displaying alpha archives.
+`[chronoarchive type="yearly" show_post_count="1"]`
+
+`[chronoarchive type="decade" order="ASC"]`
+
+`[chronoarchive type="weekly" limit="10"]`
+
+`[chronoarchive type="monthly" format="option" select_text="Choose a month"]`
+
+**Security and release status:** The imported Annual Archive code has undergone extensive hardening in development branches. Final SQL, localization and inherited-vulnerability reviews remain open. This beta has not been approved by WordPress.org and should be tested on an isolated WordPress site only.
+
+Source code, release blockers and bug reports: https://github.com/aminostudio/chronoarchive
+
+== Installation ==
+
+ChronoArchive 2.1.0-beta1 is for **testing and review only**. Do not use it on an important live website.
+
+1. Use an isolated WordPress test installation meeting the requirements above.
+2. Install a development ZIP with a top-level `chronoarchive` directory, or copy its source files into `wp-content/plugins/chronoarchive/`.
+3. Activate ChronoArchive in the WordPress Plugins screen.
+4. Add a Shortcode block such as `[chronoarchive type="yearly"]` to a test page, or use the classic widget.
+5. Check archive links, permalinks, counts, keyboard navigation and theme layout.
+6. Review the release and security notes before upgrading an existing archive installation.
+
+The public `main` branch currently contains the project landing page, **not a downloadable stable plugin**. Development snapshots should not be mistaken for releases.
+
+== Frequently Asked Questions ==
+
+= Is this plugin ready for production? =
+
+No. Version 2.1.0-beta1 is a development build. Public stable release and WordPress.org review are pending, including the final security and SQL checks.
+
+= Does ChronoArchive support old shortcodes? =
+
+Yes. `[archives]` and `[arcpromat]` are retained. Prefer `[chronoarchive]` for new sites.
+
+= What archive types can I request? =
+
+Use `yearly`, `monthly`, `weekly`, `daily`, `decade`, `alpha` or `postbypost` in the `type` attribute.
+
+= Can I use custom post types? =
+
+Supported public custom post types can be selected with `post_type`. Test their permalinks and archive configuration in your theme: some custom post types do not expose a public archive base.
+
+= How do I report a security vulnerability? =
+
+Please report vulnerabilities privately through the maintainer's contact information at https://aminostudio.fr/ instead of posting exploit details in public issues. See SECURITY.md in the GitHub development branch.
+
+= Who originally created Annual Archive? =
+
+ChronoArchive is a fork of Annual Archive, originally by Twinpictures. Historical upstream authorship and licensing notices are preserved. This independent fork is not endorsed by the original authors.
 
 == Changelog ==
 
 = 2.1.0-beta1 =
-* Weekly archives grouped by actual week start, preserving ranges that span years.
-* New chrono_week query variable for robust weekly archive URLs.
-* Decade labels use explicit year range (2020–2029).
-* CPT archive links fall back safely when a post type has_archive=false.
-* Accessible, labelled dropdowns without inline JavaScript (vanilla JS loaded on demand).
-* Registered explicit [chronoarchive] shortcode alongside [archives] and [arcpromat].
-* Verified against PHP 8.4 on Amino #LAB. This is a beta, not a production release.
 
+* Development branch: improved week archives that span calendar years.
+* Decade labels with explicit start and end year.
+* Archive fallback links for custom post types without their own archive URL.
+* Labeled dropdowns using progressive enhancement and JavaScript without inline event handlers.
+* New `[chronoarchive]` shortcode alongside the original aliases.
+* Security, permissions and WordPress compatibility fixes are being reviewed and tested before a stable release.
 
 = 2.0.1 =
-* Security: Validate shortcode tag, archive format and period against allowed values.
-* Security: Sanitize stored settings and legacy widget fields; escape HTML attributes and widget title.
-* Compatibility: Support historical boolean shortcode counts and pass post type into widget dropdowns.
-* Fix: Return article counts for decade archives and sort decades deterministically.
-* Fix: Use WordPress monthnum query parameter for custom post type monthly archives.
-* Performance: Retrieve only required columns for alpha and post-by-post listings.
-* Technical: Correct displayed plugin version to match the plugin header.
-* Scope: This is a laboratory hotfix; full regression and accessibility tests are still required.
 
+* Laboratory fixes to input validation, historical shortcode handling and decade counts.
+* Preliminary legacy widget improvements and output escaping.
+* This development version was not a public security-certified release.
 
+= Earlier history =
 
-= 2.0 =
-* Major Rebranding: Plugin renamed to ChronoArchive; file names, text domain, and classes updated.
-* Security Enhancements: 
-  - All shortcode attributes are now sanitized.
-  - Custom CSS injected into the head is escaped using esc_html() to prevent code injection.
-* Improved Code Quality: 
-  - Removal of extract() in favor of explicit variable assignments.
-  - All filters and actions are now organized within the plugin class.
-* Enhanced Compatibility: 
-  - Updated support for custom post type archive links using get_post_type_archive_link().
-* General Refactoring: Codebase refactored for improved maintainability and performance.
-
-= 1.6.0 =
-* Option to use get_post_type_archive_link for custom post types.
-* Fully tested with WordPress 6.1.
-* Escaped shortcode attributes.
-
-= 1.5.5 =
-* Addressed issues from previous support topics.
-* Tested with WordPress 5.8.1 and 5.9 alphas.
-* Updated links to new documentation.
-* Escaped plugin option page fields.
-
-= 1.5.4 =
-* Renamed showcount to show_post_count.
-* Added missing select_text field in the widget.
-* Included a notice about new features in the pro version.
-
-= 1.5.3 =
-* Changed default archive type from monthly to yearly.
-* Cleaned up the plugin options page.
-* Widget title can now be left blank.
-* Adjusted text domain loading for better integration with translation plugins.
-
-= 1.5.2 =
-* Fixed an issue with some themes causing errors in object methods.
-
-= 1.5.1 =
-* Improved caching in wp_get_archives_advanced function.
-* Moved all filters inside the main plugin class.
-* Fixed an issue with alpha order not saving in the widget.
-* Bound jQuery order swap to the element for correct behavior after saving the widget.
-
-= 1.5.0 =
-* Added new wp_get_archives_advanced function.
-* Enabled ordering for alpha and post-by-post archives.
-* Introduced archive by decade feature.
-* Tested with WordPress 4.9.3.
-
-= 1.4.10 =
-* Tested with WordPress 4.8.
-
-= 1.4.9 =
-* Tested with WordPress 4.7.3.
-* Updated links to documentation.
-
-= 1.4.8 =
-* Added post_type filter.
-* Tested with WordPress 4.7.
-
-= 1.4.7 =
-* Added backup shortcode ‘arcpromat’ to avoid conflicts.
-* Fully tested with WordPress 4.5.
-* Now fully supports WordPress Language Packs.
-
-= 1.4.6 =
-* Corrected spelling errors.
-* Tested with WordPress 4.4.
-
-= 1.4.5 =
-* Updated widget constructor to PHP5 standards.
-* Updated language text domain for compatibility with the new WordPress language system.
-
-= 1.4.4 =
-* Fixed order attribute issue when using the dropdown select element.
-
-= 1.4.3 =
-* Updated for WordPress 4.1.
-
-= 1.4.2 =
-* Added WP4.0 Icons.
-
-= 1.4.1 =
-* Added option to change sort order.
-* Introduced select_text to customize default dropdown text.
-
-= 1.4 =
-* Completely rebuilt the plugin using classes.
-* Added an options page.
-* Introduced information about Archive-Pro-Matic for extended features.
-* Updated translation files.
-
-= 1.3 =
-* Added support for all wp_get_archives formats.
-* Added before and after text inputs.
-
-= 1.2 =
-* Added translation files.
-* Included English and German translations.
-
-= 1.1.1 =
-* Updated screenshots.
-* Moved plugin to its new home on Plugin Oven.
-
-= 1.1 =
-* Added additional archive types and shortcode functionality.
-
-= 1.0 =
-* Initial release.
+ChronoArchive derives from Annual Archive. The original changelog and attribution are retained in the development repository's historical documentation.
 
 == Upgrade Notice ==
-Upgrade to 2.0.1 for initial security and compatibility fixes. Make a complete backup and test on staging before deployment to production.
 
+= 2.1.0-beta1 =
+
+Development beta only. Back up your site and test all custom archive links, widget settings and stored CSS on an isolated staging installation. Do not upgrade a production site to this build.
