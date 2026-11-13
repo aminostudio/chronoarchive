@@ -125,6 +125,25 @@ $GLOBALS['wp_the_query'] = $query;
 $query->parse_query( array( 'year' => 2025, 'decade' => '2025' ) );
 $plugin_under_test->ChronoArchive_decade_filter( $query );
 $assert( 'Invalid decade fails closed', array( 0 ) === $query->get( 'post__in' ) );
+$assert( 'Invalid decade has no results', 0 === count( $query->get_posts() ) );
+$GLOBALS['wp_the_query'] = $main_backup;
+
+foreach ( array( '2019-12-31', '2024-02-31', 'not-a-date' ) as $bad_week ) {
+    $invalid_week_query = new WP_Query();
+    $GLOBALS['wp_the_query'] = $invalid_week_query;
+    $invalid_week_query->parse_query( array( 'year' => 2024, 'chrono_week' => $bad_week ) );
+    $plugin_under_test->ChronoArchive_decade_filter( $invalid_week_query );
+    $assert( 'Invalid week input is rejected: ' . $bad_week,
+        array( 0 ) === $invalid_week_query->get( 'post__in' ) );
+}
+$GLOBALS['wp_the_query'] = $main_backup;
+
+$homepage_query = new WP_Query();
+$GLOBALS['wp_the_query'] = $homepage_query;
+$homepage_query->parse_query( array( 'chrono_week' => '2024-01-01' ) );
+$plugin_under_test->ChronoArchive_decade_filter( $homepage_query );
+$assert( 'Week selector cannot rewrite non-archive query',
+    empty( $homepage_query->get( 'date_query' ) ) );
 $GLOBALS['wp_the_query'] = $main_backup;
 
 $decade_query = new WP_Query();
