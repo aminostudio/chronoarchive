@@ -86,7 +86,11 @@ function sanitize_key( $key ) {
 }
 function wp_kses_post( $text ) {
     $text = preg_replace( '/\s+on[a-z]+\s*=\s*("[^"]*"|\x27[^\x27]*\x27|[^\s>]+)/i', '', (string) $text );
-    return strip_tags( $text, '<span><strong><em><a><aside><section><div><h2>' );
+    return strip_tags( $text, '<span><strong><em><a><aside><section><div><h2><ul><li>' );
+}
+function wp_kses( $text, $allowed ) {
+    $tags = '<' . implode( '><', array_keys( $allowed ) ) . '>';
+    return strip_tags( (string) $text, $tags );
 }
 function get_post_type_object( $name ) {
     return 'post' === $name ? (object) array( 'name' => 'post' ) : null;
