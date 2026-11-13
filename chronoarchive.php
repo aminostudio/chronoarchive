@@ -531,10 +531,19 @@ class WP_Plugin_ChronoArchive {
 				}
 			}
 		}
+		/*
+		 * Final HTML boundary: get_archives_link() escapes URLs but filters can
+		 * extend its output. Preserve permitted post markup and archive formats.
+		 */
+		$allowed_markup = wp_kses_allowed_html( 'post' );
+		$allowed_markup['option'] = array( 'value' => true, 'selected' => true );
+		$allowed_markup['link'] = array(
+			'href' => true, 'rel' => true, 'title' => true, 'type' => true,
+		);
 		if ( $r['echo'] ) {
-			echo $output;
+			echo wp_kses( $output, $allowed_markup );
 		} else {
-			return $output;
+			return wp_kses( $output, $allowed_markup );
 		}
 	}
 
