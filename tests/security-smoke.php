@@ -86,6 +86,9 @@ function esc_html( $value ) {
     return htmlspecialchars( (string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false );
 }
 function esc_attr( $value ) { return esc_html( $value ); }
+function esc_textarea( $value ) { return esc_html( $value ); }
+function settings_fields( $group ) { echo '<input type="hidden" name="option_page" value="' . esc_attr( $group ) . '">'; }
+function submit_button() { echo '<input type="submit" value="Save Changes">'; }
 function __( $text, $domain = '' ) { return $text; }
 function _e( $text, $domain = '' ) { echo $text; }
 function esc_html_e( $text, $domain = '' ) { echo esc_html( $text ); }
@@ -226,6 +229,27 @@ $plugin->plugin_head_inject();
 $invalid_css = ob_get_clean();
 $check( 'Malformed stored CSS option produces no output',
     '' === $invalid_css );
+
+$plugin->options['custom_css'] = '</textarea><svg onload=alert(1)>';
+ob_start();
+$plugin->options_page();
+$admin_settings = ob_get_clean();
+$check( 'Legacy admin form escapes persisted HTML',
+    false !== strpos( $admin_settings, '&lt;/textarea&gt;' ) &&
+    false === strpos( $admin_settings, '<svg' ) &&
+    false !== strpos( $admin_settings, '[custom_css]' ) &&
+    false !== strpos( $admin_settings, '[use_cpt_archive]' ) &&
+    false === strpos( $admin_settings, 'pluginoven.com' ) );
+
+ob_start();
+$widget->widget( array(
+    'before_widget' => '<div class="legacy"><script>alert(1)</script>',
+    'after_widget' => '</div>',
+), array( 'title' => 'Safe widget' ) );
+$wrapper = ob_get_clean();
+$check( 'Widget wrappers filter unexpected script tags',
+    false === strpos( $wrapper, '<script' ) &&
+    false !== strpos( $wrapper, 'Safe widget' ) );
 
 printf( "\nSecurity contracts: %d passed, %d failed.\n", $pass, $fail );
 exit( $fail ? 1 : 0 );
