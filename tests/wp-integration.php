@@ -187,6 +187,61 @@ $assert( 'Classic widget renders archive links', false !== strpos( $widget_outpu
 $assert( 'Trusted widget theme wrappers are preserved', false !== strpos( $widget_output, '<aside>' ) &&
     false !== strpos( $widget_output, '</aside>' ) );
 
+// WordPress's edit_css meta capability maps to unfiltered_html and is
+// restricted for multisite site administrators. Exercise both capability
+// paths using a temporary mapping filter on disposable CI only.
+$css_test_user = get_current_user_id();
+wp_set_current_user( 1 );
+$assert( 'Test administrator has edit_css privilege on a single site',
+    current_user_can( 'edit_css' ) );
+$approved_by_admin = $plugin_under_test->sanitize_settings( array(
+    'custom_css' => '.approved{color:blue}</style><script>bad</script>',
+    'use_cpt_archive' => '1',
+) );
+$assert( 'Authorized CSS settings receive explicit approval',
+    '1' === $approved_by_admin['custom_css_approved'] &&
+    false === strpos( $approved_by_admin['custom_css'], '<' ) );
+
+// Emulate the WP multisite subsite-admin permission boundary without
+// actually changing the user roles or network configuration.
+$deny_edit_css = static function ( $caps, $cap ) {
+    return 'edit_css' === $cap ? array( 'do_not_allow' ) : $caps;
+};
+update_option( 'WP_ChronoArchive_options', array(
+    'custom_css' => '.old{color:green}',
+    'use_cpt_archive' => '',
+) );
+add_filter( 'map_meta_cap', $deny_edit_css, 10, 2 );
+$assert( 'Site administrator may manage options without edit_css',
+    current_user_can( 'manage_options' ) && ! current_user_can( 'edit_css' ) );
+$blocked_css = $plugin_under_test->sanitize_settings( array(
+    'custom_css' => '.attacker{background:url(https://example.test/track)}',
+    'custom_css_approved' => '1',
+    'use_cpt_archive' => '1',
+) );
+$assert( 'Unprivileged CSS write and self-approval refused',
+    '.old{color:green}' === $blocked_css['custom_css'] &&
+    '' === $blocked_css['custom_css_approved'] &&
+    '1' === $blocked_css['use_cpt_archive'] );
+ob_start();
+$plugin_under_test->options_page();
+$read_only_css_admin = ob_get_clean();
+$assert( 'Restricted administrator sees disabled CSS editor',
+    false !== strpos( $read_only_css_admin, 'chronoarchive-custom-css' ) &&
+    false !== strpos( $read_only_css_admin, 'disabled=' ) );
+
+update_option( 'WP_ChronoArchive_options', $approved_by_admin );
+$unchanged_css = $plugin_under_test->sanitize_settings( array(
+    'custom_css' => '.overwrite{color:red}',
+    'use_cpt_archive' => '',
+) );
+$assert( 'Non-edit_css save preserves previously approved CSS',
+    $unchanged_css['custom_css'] === $approved_by_admin['custom_css'] &&
+    '1' === $unchanged_css['custom_css_approved'] );
+remove_filter( 'map_meta_cap', $deny_edit_css, 10 );
+delete_option( 'WP_ChronoArchive_options' );
+wp_set_current_user( $css_test_user );
+
 // Render administrator settings with a malicious historic textarea value.
 // WordPress esc_textarea() must keep the payload inside the textarea.
 update_option( 'WP_ChronoArchive_options', array(
