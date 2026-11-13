@@ -1093,5 +1093,4 @@ function ChronoArchive_register_widget() {
 	register_widget( 'ChronoArchive_Widget' );
 }
 add_action( 'widgets_init', 'ChronoArchive_register_widget' );
-?>
 
