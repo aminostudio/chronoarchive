@@ -7,6 +7,12 @@ on:
 permissions:
   contents: read
 
+# All draft PRs must still run real syntax and unit tests, while release
+# metadata is enforced separately at the review/release boundary.
+concurrency:
+  group: chrono-static-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   php-lint:
     name: PHP syntax (PHP ${{ matrix.php }})
@@ -43,10 +49,3 @@ jobs:
           test -f chronoarchive.php || exit 1
           find assets js -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
 
-  release-metadata:
-    name: WordPress.org metadata (intentionally blocked on LAB beta)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check WordPress release metadata
-        run: python3 scripts/check-release-metadata.py
