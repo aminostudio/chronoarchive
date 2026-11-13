@@ -55,6 +55,13 @@ function get_option( $name, $default = false ) {
 function add_action() {}
 function add_filter() {}
 function add_shortcode() {}
+function shortcode_atts( $pairs, $atts, $shortcode = '' ) {
+    $out = array();
+    foreach ( $pairs as $key => $default ) {
+        $out[ $key ] = isset( $atts[ $key ] ) ? $atts[ $key ] : $default;
+    }
+    return apply_filters( 'shortcode_atts_' . $shortcode, $out );
+}
 function plugin_basename( $path ) { return basename( $path ); }
 function __($s) { return $s; }
 function esc_html($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
@@ -221,6 +228,55 @@ $widget->widget( array( 'before_widget' => '<aside>' ), array( 'type' => 'yearly
 $filtered_widget_html = ob_get_clean();
 ca_assert( 'Malformed wrapper filter is ignored', false === strpos( $filtered_widget_html, 'Array' ) && false !== strpos( $filtered_widget_html, '2026' ) );
 unset( $GLOBALS['ca_mock_filters']['widget_before'] );
+
+// A trusted WordPress shortcode_atts filter may unexpectedly return malformed
+// data. The plugin must not emit PHP type warnings or unsafe markup.
+$GLOBALS['ca_mock_filters']['shortcode_atts_archives'] = array(
+    'type' => array( 'yearly' ),
+    'limit' => array( 2 ),
+    'format' => array( 'html' ),
+    'before' => array( '<svg onload=alert(1)>' ),
+    'after' => new stdClass(),
+    'show_post_count' => array( 'yes' ),
+    'showcount' => array( 'yes' ),
+    'tag' => array( 'script' ),
+    'order' => array( 'DROP' ),
+    'alpha_order' => array( 'DESC' ),
+    'post_order' => array( 'ASC' ),
+    'select_text' => array( '<img onerror=alert(1)>' ),
+    'post_type' => array( 'post' ),
+    'use_cpt_archive' => array( true ),
+);
+$warnings = 0;
+set_error_handler( function ( $severity, $message ) use ( &$warnings ) {
+    ++$warnings;
+    throw new ErrorException( $message, 0, $severity );
+} );
+$render_error = null;
+$filtered = '';
+try {
+    $filtered = $WP_Plugin_ChronoArchive->shortcode( array( 'type' => 'yearly' ) );
+} catch ( Throwable $error ) {
+    $render_error = $error->getMessage();
+}
+restore_error_handler();
+ca_assert( 'Malformed shortcode filter output does not throw', null === $render_error );
+ca_assert( 'Malformed shortcode filter output causes no PHP warnings', 0 === $warnings );
+ca_assert( 'Malformed shortcode tag falls back to UL', 0 === strpos( trim( $filtered ), '<ul>' ) );
+ca_assert( 'Malformed shortcode filter cannot insert active SVG or script', false === stripos( $filtered, '<svg' ) && false === stripos( $filtered, '<script' ) );
+ca_assert( 'Malformed shortcode filter preserves archive listing', false !== strpos( $filtered, '2026' ) );
+
+$GLOBALS['ca_mock_filters']['shortcode_atts_archives'] = new stdClass();
+$render_error = null;
+$filtered = '';
+try {
+    $filtered = $WP_Plugin_ChronoArchive->shortcode( array() );
+} catch ( Throwable $error ) {
+    $render_error = $error->getMessage();
+}
+ca_assert( 'Non-array shortcode filter return is not fatal', null === $render_error );
+ca_assert( 'Non-array shortcode filter return uses safe defaults', false !== strpos( $filtered, '2026' ) );
+unset( $GLOBALS['ca_mock_filters']['shortcode_atts_archives'] );
 
 echo "\nMock security checks: {$passes} passed, {$fails} failed.\n";
 exit( $fails ? 1 : 0 );
