@@ -931,7 +931,7 @@ class ChronoArchive_Widget extends WP_Widget {
 		$order = $get( 'order', 'DESC' );
 		$alpha_order = $get( 'alpha_order', 'ASC' );
 		$post_order = $get( 'post_order', 'DESC' );
-		$select_text = $get( 'select_text' );
+		$select_text = sanitize_text_field( $get( 'select_text' ) );
 		?>
 		<p>
 			<label for="<?php echo esc_attr( $this->get_field_id( 'title' ) ); ?>">
