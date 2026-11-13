@@ -77,3 +77,46 @@ jobs:
           php /tmp/wp-cli.phar eval-file \
             /tmp/chrono-wp/wp-content/plugins/chronoarchive/tests/wp-integration.php \
             --path=/tmp/chrono-wp
+      - name: Test actual HTTP archive URLs (guest visitor)
+        shell: bash
+        run: |
+          set -euo pipefail
+          wpcli=(php /tmp/wp-cli.phar --path=/tmp/chrono-wp)
+          "${wpcli[@]}" option update home 'http://127.0.0.1:8093'
+          "${wpcli[@]}" option update siteurl 'http://127.0.0.1:8093'
+          "${wpcli[@]}" option update start_of_week 1
+          "${wpcli[@]}" rewrite structure '/%year%/%monthnum%/%day%/%postname%/'
+          "${wpcli[@]}" post create --post_title='CA HTTP Boundary Dec' \
+            --post_date='2019-12-31 12:00:00' --post_status=publish --porcelain >/dev/null
+          "${wpcli[@]}" post create --post_title='CA HTTP Boundary Jan' \
+            --post_date='2020-01-01 12:00:00' --post_status=publish --porcelain >/dev/null
+          php -S 127.0.0.1:8093 -t /tmp/chrono-wp /tmp/chrono-wp/index.php \
+            >/tmp/chrono-http-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --silent --max-time 3 http://127.0.0.1:8093/ -o /dev/null; then
+              break
+            fi
+            sleep 0.5
+          done
+
+          week_url='http://127.0.0.1:8093/2019/?chrono_week=2019-12-30'
+          week_code=$(curl --silent --show-error --max-time 20 \
+            --output /tmp/chrono-week.html --write-out '%{http_code}' "$week_url")
+          echo "Cross-year weekly archive HTTP status: $week_code"
+          test "$week_code" = 200
+          grep -Fq 'CA HTTP Boundary Dec' /tmp/chrono-week.html
+          grep -Fq 'CA HTTP Boundary Jan' /tmp/chrono-week.html
+          echo 'PASS: cross-year week contains the Dec and Jan articles'
+
+          invalid_url='http://127.0.0.1:8093/2024/?chrono_week=2024-02-31'
+          invalid_code=$(curl --silent --show-error --max-time 20 \
+            --output /tmp/chrono-invalid.html --write-out '%{http_code}' "$invalid_url")
+          echo "Invalid week HTTP status: $invalid_code"
+          test "$invalid_code" = 404
+          if grep -Eq 'CA HTTP Boundary (Dec|Jan)' /tmp/chrono-invalid.html; then
+            echo 'FAIL: invalid week exposed unrelated content'
+            exit 1
+          fi
+          echo 'PASS: invalid week gives 404 without unrelated archives'
