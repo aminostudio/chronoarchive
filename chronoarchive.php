@@ -423,10 +423,13 @@ class WP_Plugin_ChronoArchive {
 			$r['type'] = 'yearly';
 		}
 
-		if ( ! empty( $r['limit'] ) ) {
-			$r['limit'] = absint( $r['limit'] );
-			$r['limit'] = ' LIMIT ' . $r['limit'];
-		}
+		// A zero/omitted limit means unlimited. Never append a bare "0"
+		// after ORDER BY: the legacy path produced invalid SQL for limit=0.
+		// Invalid nonempty values preserve a fail-closed SQL LIMIT 0.
+		$limit_present = ! empty( $r['limit'] );
+		$listing_limit = $limit_present ? absint( $r['limit'] ) : 0;
+		$invalid_listing_limit = $limit_present && 0 === $listing_limit;
+		$r['limit'] = $limit_present ? ' LIMIT ' . $listing_limit : '';
 
 		$order = strtoupper( $r['order'] );
 		if ( $order !== 'ASC' ) {
@@ -639,13 +642,40 @@ class WP_Plugin_ChronoArchive {
 			if ( $post_order !== 'DESC' ) {
 				$post_order = 'ASC';
 			}
-			$orderby = ( 'alpha' == $r['type'] ) ? 'post_title ' . $alpha_order : 'post_date ' . $post_order . ', ID DESC';
-			$query   = "SELECT DISTINCT $wpdb->posts.ID AS ID, post_title, post_date FROM $wpdb->posts $join $where ORDER BY $orderby $limit";
-			$query = self::finalize_archive_sql( $query, $r['post_type'] );
-			if ( '' === $query ) {
-				return '';
+			// Use WordPress's structured query API when there are no SQL
+			// archive hooks. It handles native post queries and their cache,
+			// rather than interpolating SQL for ordinary public listings.
+			// Callbacks on either legacy SQL hook retain their original
+			// behavior and use the specialized query below.
+			if ( ! $invalid_listing_limit && ! has_filter( 'getarchives_where' ) && ! has_filter( 'getarchives_join' ) ) {
+				$query_args = array(
+					'post_type'              => $r['post_type'],
+					'post_status'            => 'publish',
+					'posts_per_page'         => $listing_limit > 0 ? $listing_limit : -1,
+					'ignore_sticky_posts'    => true,
+					'no_found_rows'          => true,
+					'cache_results'          => true,
+					'update_post_meta_cache' => false,
+					'update_post_term_cache' => false,
+					// Keep normal WP_Query filters enabled, as expected
+					// by WordPress plugins and the Plugin Check VIP rules.
+					'orderby'                => 'alpha' === $r['type']
+						? 'title' : array( 'date' => $post_order, 'ID' => 'DESC' ),
+					'order'                  => $alpha_order,
+				);
+				$native_query = new WP_Query( $query_args );
+				$results = $native_query->posts;
+			} else {
+				$orderby = ( 'alpha' == $r['type'] )
+					? 'post_title ' . $alpha_order
+					: 'post_date ' . $post_order . ', ID DESC';
+				$query = "SELECT DISTINCT $wpdb->posts.ID AS ID, post_title, post_date FROM $wpdb->posts $join $where ORDER BY $orderby $limit";
+				$query = self::finalize_archive_sql( $query, $r['post_type'] );
+				if ( '' === $query ) {
+					return '';
+				}
+				$results = self::cached_archive_rows( $query, $last_changed );
 			}
-			$results = self::cached_archive_rows( $query, $last_changed );
 			if ( $results ) {
 				foreach ( (array) $results as $result ) {
 					if ( $result->post_date != '0000-00-00 00:00:00' ) {
