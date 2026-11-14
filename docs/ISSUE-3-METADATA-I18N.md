@@ -45,3 +45,12 @@ At commit `60ecb9835577737b4643e90b0cb727f468dd2fd4`, the development metadata s
 **Not executed on this draft PR:** official Plugin Check and strict release-readiness jobs, which are intentionally skipped until ready-for-review or manual invocation. Previous inherited SQL and packaging findings remain tracked under #4 and the final release checklist. A passing metadata-schema job is **not** proof that all WordPress.org requirements or security risks are resolved.
 
 The main branch remains a public project landing page; this branch is still a draft and does not update Amino #LAB.
+
+
+## Follow-on WordPress.org compatibility (2026-11-14)
+
+The official Plugin Check 2.2.0 run [43552800337](https://github.com/aminostudio/chronoarchive/actions/runs/43552800337) reported `load_plugin_textdomain()` as discouraged on WordPress.org. The cleanup removes the `init` hook and explicit loader, leaving the consistent `chronoarchive` text domain intact.
+
+WordPress.org manages language packs and just-in-time translation loading for hosted plugins. This project presently contains no bundled `languages/` folder. Distribution-specific bundled translations would need their own loading plan and tests.
+
+The historical legal/attribution notice is now at [NOTICE.md](NOTICE.md), with upstream attribution retained in the JS file, distribution readme and root LICENSE. No release or deployment follows from this cleanup.

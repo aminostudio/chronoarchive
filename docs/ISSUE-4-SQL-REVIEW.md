@@ -67,3 +67,22 @@ The development follow-on:
 
 This improves JOIN correctness. Large-corpus query plan benchmarking and
 WordPress.org Plugin Check direct-SQL observations remain separate work.
+
+
+## Official WordPress Plugin Check 2.2.0 result (2026-11-14)
+
+[GitHub run 43552800337](https://github.com/aminostudio/chronoarchive/actions/runs/43552800337) identified **12 errors and 8 warnings**:
+
+- Six `PluginCheck.Security.DirectDB.UnescapedDBParameter` errors.
+- Six `WordPress.DB.PreparedSQL.NotPrepared` errors.
+- Six `WordPress.DB.DirectDatabaseQuery.DirectQuery` warnings.
+- One discouraged `load_plugin_textdomain()` warning.
+- One unexpected root-level `NOTICE.md` warning.
+
+The release-readiness workflow correctly blocks `2.1.0-beta1` as a prerelease. Only the legacy translation loader and notice-location warnings are addressed by the present cleanup.
+
+**All twelve SQL errors and six SQL warnings remain explicitly OPEN.** No `phpcs:ignore`, blanket ignore codes, or artificial placeholder preparation has been added. The final SQL includes trusted WordPress hooks `getarchives_where` and `getarchives_join`. Replacing their SQL fragments with SQL value placeholders would break compatibility; a dedicated review of the trust boundary is required.
+
+WordPress Plugin Check can also report false positives on prepared queries stored in intermediate variables, but that does not prove these dynamic queries secure. Consult the [WordPress prepare() API](https://developer.wordpress.org/reference/classes/wpdb/prepare/).
+
+Next milestone: isolated large-corpus SQL query plans, hook-compatibility and cache invalidation tests, and source-level security rationale for each query.
