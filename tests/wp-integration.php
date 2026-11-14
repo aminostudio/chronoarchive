@@ -742,6 +742,64 @@ if ( ! is_wp_error( $editor_id ) ) {
     wp_set_current_user( $old_user );
 }
 
+
+// Regressions for the documented Annual Archive XSS advisory *classes*.
+// These are additional controls for the fork, NOT proof that the advisory's
+// exact original exploit paths have been exhaustively reproduced.
+$cve_select = do_shortcode(
+    '[chronoarchive type="yearly" format="option" limit="2" select_text="<img src=x onerror=alert(1)>"]'
+);
+$assert( 'CVE class: dropdown text never creates active image HTML',
+    1 === substr_count( $cve_select, '<select' ) &&
+    false === stripos( $cve_select, '<img' ) &&
+    false === stripos( $cve_select, 'onerror=' ) );
+$assert( 'CVE class: malicious dropdown keeps accessible text label',
+    false !== strpos( $cve_select, 'screen-reader-text' ) &&
+    false !== strpos( $cve_select, '<option value="">' ) );
+
+$cve_direct = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type'   => 'yearly',
+    'limit'  => 2,
+    'echo'   => 0,
+    'before' => '<span onclick="alert(1)">Start</span>',
+    'after'  => '<a href="javascript:alert(1)">End</a>',
+) );
+$assert( 'CVE class: direct API output excludes HTML event handlers',
+    is_string( $cve_direct ) && false !== strpos( $cve_direct, '<a ' ) &&
+    false === stripos( $cve_direct, 'onclick=' ) );
+$assert( 'CVE class: direct API output excludes javascript URL schemes',
+    false === stripos( $cve_direct, 'javascript:' ) );
+
+$cve_widget = $widget->update( array(
+    'title'       => '"><img src=x onerror=alert(1)>',
+    'type'        => 'yearly',
+    'format'      => 'option',
+    'select_text' => '</option><svg onload=alert(1)>',
+    'before'      => '<span onclick=alert(1)>Before</span>',
+    'after'       => '<img src=x onerror=alert(1)>',
+), array() );
+ob_start();
+$widget->form( $cve_widget );
+$cve_form = ob_get_clean();
+$assert( 'CVE class: saved widget form escapes HTML injections',
+    false === stripos( $cve_form, '<img' ) &&
+    false === stripos( $cve_form, '<svg' ) &&
+    false === stripos( $cve_form, 'onerror=' ) &&
+    false === stripos( $cve_form, 'onload=' ) );
+ob_start();
+$widget->widget( array(
+    'before_widget' => '<aside>', 'after_widget' => '</aside>',
+    'before_title' => '<h3>', 'after_title' => '</h3>',
+), $cve_widget );
+$cve_widget_render = ob_get_clean();
+$assert( 'CVE class: saved widget render neutralizes executable tags',
+    false !== strpos( $cve_widget_render, '<select' ) &&
+    false === stripos( $cve_widget_render, '<img' ) &&
+    false === stripos( $cve_widget_render, '<svg' ) &&
+    false === stripos( $cve_widget_render, '<script' ) &&
+    false === stripos( $cve_widget_render, 'onclick=' ) &&
+    false === stripos( $cve_widget_render, 'onerror=' ) );
+
 register_post_type( 'ca_qa_public', array( 'public' => true, 'has_archive' => false ) );
 $cpt_id = wp_insert_post( array(
     'post_type' => 'ca_qa_public', 'post_status' => 'publish',

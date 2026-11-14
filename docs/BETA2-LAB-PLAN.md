@@ -1,6 +1,6 @@
 # ChronoArchive 2.1.0-beta2: controlled LAB acceptance plan
 
-**Not installed yet.** Amino #LAB currently runs **2.1.0-beta1**.
+**Installed on 2026-11-14.** Amino #LAB now runs **2.1.0-beta2**; this document retains the original preflight checklist as a historical procedure. Refer to [the live acceptance record](LAB-BETA2-LIVE-QA.md) for executed checks and remaining steps.
 The candidate package is a development-only artifact on the integration branch,
 not a production release or WordPress.org-approved plugin.
 

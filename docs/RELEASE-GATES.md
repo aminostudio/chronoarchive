@@ -1,12 +1,12 @@
 # ChronoArchive release gates
 
-**LAB installed baseline:** `2.1.0-beta1`. **Integration candidate:** `2.1.0-beta2` (not deployed). **Stable release status: BLOCKED.** No stable tag, WordPress.org submission or production recommendation.
+**Imported LAB baseline:** `2.1.0-beta1`. **Currently installed on LAB:** `2.1.0-beta2` (administrator-confirmed 2026-11-14). **Stable release status: BLOCKED.** No stable tag, WordPress.org submission or production recommendation.
 
 ## P0 blockers
 
 - [x] Import the four LAB source files on a dedicated branch and preserve the original beta baseline.
 - [ ] Verify the source against a byte-exact source export/checksum. WPVibe read-only source retrieval masks recognized secret patterns; the retrieved four files had no redaction tokens, but byte-level equality has not been independently established.
-- [ ] Investigate the historical Annual Archive XSS advisories (`CVE-2023-0178`, `CVE-2024-33598`) and test the fork's actual affected paths.
+- [ ] Investigate the historical Annual Archive XSS advisories (`CVE-2023-0178`, `CVE-2023-49847`, `CVE-2024-33598`) and test the fork's actual affected paths.
 - [ ] Audit all shortcode and widget arguments, HTML output, SQL, custom CSS and archive URLs. Patch defects with regression tests.
 - [ ] Correct plugin headers (`Requires at least`, `Requires PHP`, `License URI`, `Text Domain`) and replace the old WordPress.org `readme.txt` structure.
 - [ ] Replace obsolete Annual Archive support/reviews/promotional URLs in the administration page; preserve upstream attribution.
@@ -39,11 +39,28 @@ Always identify whether a check was run or merely planned.
 
 ## LAB beta2 gate (separate from stable publication)
 
-- [ ] Download the reproducible beta2 development ZIP from the successful integration GitHub Actions run.
-- [ ] Confirm the ZIP runtime/attribution allowlist, **case-sensitive `ChronoArchive/` top-level folder matching the LAB plugin basename**, and matching version metadata.
+- [x] Reproducible beta2 development ZIP built, verified, installed on LAB by the administrator on 2026-11-14.
+- [x] ZIP runtime/attribution allowlist and **case-sensitive `ChronoArchive/` root** verified; connected LAB confirms plugin active as `2.1.0-beta2`.
 - [ ] Back up LAB plugin files and database; retain a working 2.1.0-beta1 rollback path.
 - [ ] Perform authorized administrator-only QA with Under Construction still active for visitors.
 - [ ] Confirm page 70 archives, page 75 private cases, historical week/decade links, CPT links, keyboard navigation, widget settings and cache.
 - [ ] Record actual LAB HTTP/network results in GitHub before promotion.
 
 **LAB beta acceptance is not WordPress.org approval.** The two SQL checker errors, direct-query warning, human trust-boundary review and upstream CVE analysis remain stable-release blockers.
+
+
+### Live beta2 observations
+
+The administrator installed the exact LAB beta2 ZIP successfully on
+2026-11-14. [Real LAB QA evidence](LAB-BETA2-LIVE-QA.md) confirms the active
+version, UCP protection, published page 70 server-rendered output,
+39 published posts over 30 years, matching decade/year/week counters, and
+security page 75 remaining a draft. **Browser navigation and actual HTTP
+status with UCP bypass remain pending.** No fresh restorable backup has
+been independently confirmed through the connected WordPress interface.
+
+The [upstream XSS advisory inventory](UPSTREAM-CVE-MAPPING.md) now includes
+**three** distinct CVE records: CVE-2023-0178, CVE-2023-49847 and
+CVE-2024-33598. The existing PHP escapes shortcode/administration/widget
+output and the CI suite includes malicious attribute tests; do not equate
+those tests with independent disclosure-specific exploit confirmation.

@@ -2,7 +2,7 @@
 
 **Chronological archives for WordPress.** A community-maintained GPL fork of **Annual Archive** by Twinpictures.
 
-> **Development beta.** The LAB is still running `2.1.0-beta1`. A separate `2.1.0-beta2` integration candidate is being prepared and has **not** been deployed. Its SQL review and WordPress.org approval remain open; do not install it on production sites.
+> **Development beta.** ChronoArchive `2.1.0-beta2` has been installed on the protected Amino #LAB (2026-11-14) and its initial authenticated archive rendering was validated. Security review, complete browser QA, and WordPress.org approval remain open; **do not install on production sites**. See [live QA](docs/LAB-BETA2-LIVE-QA.md) and [upstream CVE tracking](docs/UPSTREAM-CVE-MAPPING.md).
 
 ## Features
 
