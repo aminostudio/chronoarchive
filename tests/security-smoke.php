@@ -152,7 +152,7 @@ $yearly = WP_Plugin_ChronoArchive::wp_get_archives_advanced(
 ca_assert( 'Malformed direct arguments do not throw', is_string( $yearly ) );
 ca_assert( 'Invalid HTML attribute stripped', false === strpos( $yearly, 'onclick=' ) );
 ca_assert( 'Yearly fallback renders', false !== strpos( $yearly, '2026' ) );
-ca_assert( 'Bad sort falls back to DESC', false !== strpos( $GLOBALS['ca_fake_query'], 'ORDER BY post_date DESC' ) );
+ca_assert( 'Bad sort falls back to DESC', false !== strpos( $GLOBALS['ca_fake_query'], 'ORDER BY `year` DESC' ) );
 ca_assert( 'Bad limit is ignored', false === strpos( $GLOBALS['ca_fake_query'], 'LIMIT' ) );
 
 $GLOBALS['ca_mock_filters']['widget_title'] = array( 'not a scalar' );

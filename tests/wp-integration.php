@@ -62,6 +62,39 @@ foreach ( array( '2019-12-31 12:00:00', '2020-01-01 12:00:00' ) as $date ) {
     $boundary_ids[] = $id;
 }
 
+// Exercise real MariaDB in strict grouping mode before the ordinary archive
+// render suite. WordPress normally removes ONLY_FULL_GROUP_BY from its SQL
+// session, so errors in grouping can otherwise remain invisible in CI.
+$previous_sql_mode = (string) $wpdb->get_var( 'SELECT @@SESSION.sql_mode' );
+$strict_query = $wpdb->query( "SET SESSION sql_mode = 'ONLY_FULL_GROUP_BY'" );
+$strict_enabled = false !== $strict_query &&
+    false !== strpos( (string) $wpdb->get_var( 'SELECT @@SESSION.sql_mode' ), 'ONLY_FULL_GROUP_BY' );
+$assert( 'MariaDB ONLY_FULL_GROUP_BY enabled for archive regression', $strict_enabled );
+if ( $strict_enabled ) {
+    wp_cache_flush();
+    foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade' ) as $bucket_type ) {
+        $wpdb->last_error = '';
+        $strict_html = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+            'type' => $bucket_type, 'order' => 'ASC', 'limit' => 4, 'echo' => 0,
+        ) );
+        $assert( 'Strict SQL ' . $bucket_type . ': no database error', '' === $wpdb->last_error );
+        $assert( 'Strict SQL ' . $bucket_type . ': archive links generated',
+            is_string( $strict_html ) && false !== strpos( $strict_html, '<a ' ) );
+    }
+    // Grouped lists also need deterministic ordering and LIMIT semantics.
+    $strict_year_desc = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+        'type' => 'yearly', 'order' => 'DESC', 'limit' => 2, 'echo' => 0,
+    ) );
+    $assert( 'Strict SQL descending year order and limit',
+        is_string( $strict_year_desc ) &&
+        false !== strpos( $strict_year_desc, '2026' ) &&
+        false !== strpos( $strict_year_desc, '2025' ) &&
+        2 === substr_count( $strict_year_desc, '<li>' ) );
+}
+$restored_sql_mode = $wpdb->query( $wpdb->prepare( 'SET SESSION sql_mode = %s', $previous_sql_mode ) );
+$assert( 'Original database session SQL mode restored', false !== $restored_sql_mode &&
+    $previous_sql_mode === (string) $wpdb->get_var( 'SELECT @@SESSION.sql_mode' ) );
+
 foreach ( array( 'archives', 'arcpromat', 'chronoarchive' ) as $alias ) {
     $assert( 'Alias registered ' . $alias, shortcode_exists( $alias ) );
 }

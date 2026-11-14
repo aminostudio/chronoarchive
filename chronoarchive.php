@@ -389,11 +389,14 @@ class WP_Plugin_ChronoArchive {
 		$last_changed = wp_cache_get_last_changed( 'posts' );
 		$limit = $r['limit'];
 
+		// Grouped archives must sort on their grouped date buckets, not raw
+		// post_date. The latter is ambiguous and can fail ONLY_FULL_GROUP_BY.
+		// Sort directions are already allowlisted to ASC/DESC above.
 		// Monthly archives.
         // Using a direct query here is necessary for efficient archive grouping.
         // The query is prepared and cached for security and performance.
 		if ( 'monthly' == $r['type'] ) {
-			$query = "SELECT YEAR(post_date) AS `year`, MONTH(post_date) AS `month`, count(ID) as posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date), MONTH(post_date) ORDER BY post_date $order $limit";
+			$query = "SELECT YEAR(post_date) AS `year`, MONTH(post_date) AS `month`, count(ID) as posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date), MONTH(post_date) ORDER BY `year` $order, `month` $order $limit";
 			$key   = md5( $query );
 			$key   = "wp_get_archives_advanced:$key:$last_changed";
 			if ( ! $results = wp_cache_get( $key, 'posts' ) ) {
@@ -431,7 +434,7 @@ class WP_Plugin_ChronoArchive {
         // Using a direct query here is necessary for efficient archive grouping.
         // The query is prepared and cached for security and performance.
 		} elseif ( 'yearly' == $r['type'] ) {
-			$query = "SELECT YEAR(post_date) AS `year`, count(ID) as posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date) ORDER BY post_date $order $limit";
+			$query = "SELECT YEAR(post_date) AS `year`, count(ID) as posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date) ORDER BY `year` $order $limit";
 			$key   = md5( $query );
 			$key   = "wp_get_archives_advanced:$key:$last_changed";
 			if ( ! $results = wp_cache_get( $key, 'posts' ) ) {
@@ -465,7 +468,7 @@ class WP_Plugin_ChronoArchive {
         // Using a direct query here is necessary for efficient archive grouping.
         // The query is prepared and cached for security and performance.
 		} elseif ( 'daily' == $r['type'] ) {
-			$query = "SELECT YEAR(post_date) AS `year`, MONTH(post_date) AS `month`, DAYOFMONTH(post_date) AS `dayofmonth`, count(ID) as posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date), MONTH(post_date), DAYOFMONTH(post_date) ORDER BY post_date $order $limit";
+			$query = "SELECT YEAR(post_date) AS `year`, MONTH(post_date) AS `month`, DAYOFMONTH(post_date) AS `dayofmonth`, count(ID) as posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date), MONTH(post_date), DAYOFMONTH(post_date) ORDER BY `year` $order, `month` $order, `dayofmonth` $order $limit";
 			$key   = md5( $query );
 			$key   = "wp_get_archives_advanced:$key:$last_changed";
 			if ( ! $results = wp_cache_get( $key, 'posts' ) ) {
@@ -522,7 +525,7 @@ class WP_Plugin_ChronoArchive {
         // Using a direct query here is necessary for efficient archive grouping.
         // The query is prepared and cached for security and performance.
 		} elseif ( 'decade' == $r['type'] ) {
-			$query = "SELECT COUNT(*) AS posts, decade, decade + 9 AS end_year FROM (SELECT FLOOR(YEAR(post_date) / 10) * 10 AS decade FROM $wpdb->posts $join $where) t GROUP BY decade ORDER BY decade $order $limit";
+			$query = "SELECT COUNT(*) AS posts, decade, MAX(decade) + 9 AS end_year FROM (SELECT FLOOR(YEAR(post_date) / 10) * 10 AS decade FROM $wpdb->posts $join $where) t GROUP BY decade ORDER BY decade $order $limit";
 			$key   = md5( $query );
 			$key   = "wp_get_archives_advanced:$key:$last_changed";
 			if ( ! $results = wp_cache_get( $key, 'posts' ) ) {
