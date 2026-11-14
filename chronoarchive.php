@@ -3,7 +3,7 @@
 Plugin Name: ChronoArchive
 Plugin URI: https://github.com/aminostudio/chronoarchive
 Description: Create daily, weekly, monthly, yearly, decade and alphabetical archives using a shortcode or classic widget.
-Version: 2.1.0-beta1
+Version: 2.1.0-beta2
 Requires at least: 6.5
 Requires PHP: 7.2
 Author: Amino Studio
@@ -32,7 +32,7 @@ class WP_Plugin_ChronoArchive {
 	 * @var string
 	 */
 	var $plugin_name = 'ChronoArchive';
-	var $version = '2.1.0-beta1';
+	var $version = '2.1.0-beta2';
 	// Historical Settings API group, not the translation text domain.
 	// Preserve the original value for existing settings and fallback options.
 	var $domain = 'ChronoArchive';
@@ -938,7 +938,7 @@ class ChronoArchive_Widget extends WP_Widget {
 
 		if ( $format == 'option' ) {
 			$select_id = wp_unique_id( 'chronoarchive-select-' );
-			wp_enqueue_script( 'chronoarchive-dropdown', plugins_url( 'assets/js/archive-dropdown.js', __FILE__ ), array(), '2.1.0-beta1', true );
+			wp_enqueue_script( 'chronoarchive-dropdown', plugins_url( 'assets/js/archive-dropdown.js', __FILE__ ), array(), $this->version, true );
 			$dtitle = $select_text ? $select_text : ( $type == 'monthly' ? __( 'Select Month', 'chronoarchive' ) : ( $type == 'weekly' ? __( 'Select Week', 'chronoarchive' ) : ( $type == 'daily' ? __( 'Select Day', 'chronoarchive' ) : ( $type == 'postbypost' || $type == 'alpha' ? __( 'Select Post', 'chronoarchive' ) : __( 'Select Year', 'chronoarchive' ) ) ) ) );
 			?>
 			<label for="<?php echo esc_attr( $select_id ); ?>" class="screen-reader-text"><?php esc_html_e( 'Choose archive', 'chronoarchive' ); ?></label>

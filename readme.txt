@@ -3,7 +3,7 @@ Contributors: aminostudio
 Tags: archives, shortcode, widget, date archives, custom post types
 Requires at least: 6.5
 Tested up to: 7.1
-Stable tag: 2.1.0-beta1
+Stable tag: 2.1.0-beta2
 Requires PHP: 7.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -42,7 +42,7 @@ Source code, release blockers and bug reports: https://github.com/aminostudio/ch
 
 == Installation ==
 
-ChronoArchive 2.1.0-beta1 is for **testing and review only**. Do not use it on an important live website.
+ChronoArchive 2.1.0-beta2 is for **testing and review only**. Do not use it on an important live website.
 
 1. Use an isolated WordPress test installation meeting the requirements above.
 2. Install a development ZIP with a top-level `chronoarchive` directory, or copy its source files into `wp-content/plugins/chronoarchive/`.
@@ -57,7 +57,7 @@ The public `main` branch currently contains the project landing page, **not a do
 
 = Is this plugin ready for production? =
 
-No. Version 2.1.0-beta1 is a development build. Public stable release and WordPress.org review are pending, including the final security and SQL checks.
+No. Version 2.1.0-beta2 is a development build. Public stable release and WordPress.org review are pending, including the final security and SQL checks.
 
 = Does ChronoArchive support old shortcodes? =
 
@@ -81,6 +81,14 @@ ChronoArchive is a fork of Annual Archive, originally by Twinpictures. Historica
 
 == Changelog ==
 
+= 2.1.0-beta2 =
+
+* Security hardening across archive inputs, shortcodes, widget settings, multisite CSS and output escaping.
+* Strict SQL grouping, distinct post counts for custom JOINs, and correct cache invalidation.
+* Native WP_Query for unfiltered alphabetical and post-by-post listings, retaining the legacy SQL hooks.
+* Reproducible WordPress, PHP and MariaDB integration and performance tests.
+* Development-only. SQL human review, inherited-vulnerability review and WordPress.org approval remain open.
+
 = 2.1.0-beta1 =
 
 * Development branch: improved week archives that span calendar years.
@@ -101,6 +109,10 @@ ChronoArchive is a fork of Annual Archive, originally by Twinpictures. Historica
 ChronoArchive derives from Annual Archive. The original changelog and attribution are retained in the development repository's historical documentation.
 
 == Upgrade Notice ==
+
+= 2.1.0-beta2 =
+
+LAB-only candidate. Back up the plugin directory, database and stored settings before installing. Confirm shortcodes, widgets, navigation, dropdowns, custom post types and historical links. Never deploy this beta to production.
 
 = 2.1.0-beta1 =
 

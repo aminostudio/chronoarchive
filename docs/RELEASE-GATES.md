@@ -1,6 +1,6 @@
 # ChronoArchive release gates
 
-**Baseline:** `2.1.0-beta1`. **Release status: BLOCKED.** No stable tag, WordPress.org submission or production recommendation.
+**LAB installed baseline:** `2.1.0-beta1`. **Integration candidate:** `2.1.0-beta2` (not deployed). **Stable release status: BLOCKED.** No stable tag, WordPress.org submission or production recommendation.
 
 ## P0 blockers
 
@@ -36,3 +36,14 @@
 5. WordPress.org new plugin submission, human review, and SVN publishing **only after approval**.
 
 Always identify whether a check was run or merely planned.
+
+## LAB beta2 gate (separate from stable publication)
+
+- [ ] Download the reproducible beta2 development ZIP from the successful integration GitHub Actions run.
+- [ ] Confirm the ZIP runtime/attribution allowlist, correct top-level folder and matching version metadata.
+- [ ] Back up LAB plugin files and database; retain a working 2.1.0-beta1 rollback path.
+- [ ] Perform authorized administrator-only QA with Under Construction still active for visitors.
+- [ ] Confirm page 70 archives, page 75 private cases, historical week/decade links, CPT links, keyboard navigation, widget settings and cache.
+- [ ] Record actual LAB HTTP/network results in GitHub before promotion.
+
+**LAB beta acceptance is not WordPress.org approval.** The two SQL checker errors, direct-query warning, human trust-boundary review and upstream CVE analysis remain stable-release blockers.
