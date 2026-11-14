@@ -305,6 +305,65 @@ if ( ! is_wp_error( $join_post ) ) {
 }
 
 
+// wp_get_archives() passes an already-prepared WHERE to these legacy hooks.
+// Verify the final SQL may be rebound without changing the hook-visible SQL,
+// breaking legal percent signs (including the literal sequence "%s"), or
+// losing support for trusted plugins that fully rewrite the WHERE clause.
+$hook_seen = array();
+$legacy_cases = array(
+    'literal-percent' => array(
+        'filter' => static function ( $where ) {
+            return $where . " AND post_title LIKE 'CA-CI%'";
+        },
+        'expect_rows' => true,
+    ),
+    'prepared-percent' => array(
+        'filter' => static function ( $where ) use ( $wpdb ) {
+            return $where . $wpdb->prepare( ' AND post_title LIKE %s', 'CA-CI%' );
+        },
+        'expect_rows' => true,
+    ),
+    'reordered-where' => array(
+        'filter' => static function ( $where ) {
+            // Deliberately remove the canonical clause byte sequence.
+            // This trusted full rewrite must remain backwards compatible.
+            return "WHERE post_status = 'publish' AND post_type = 'post' AND post_title LIKE 'CA-CI%'";
+        },
+        'expect_rows' => true,
+    ),
+    'literal-placeholder-like' => array(
+        'filter' => static function ( $where ) {
+            // "%s" here is SQL LIKE text, not a wpdb::prepare() argument.
+            return $where . " AND post_title LIKE 'CA-CI%suffix'";
+        },
+        'expect_rows' => false,
+    ),
+);
+foreach ( $legacy_cases as $case => $spec ) {
+    $wrapped_filter = static function ( $where, $args ) use ( &$hook_seen, $spec ) {
+        $hook_seen[] = $where;
+        return call_user_func( $spec['filter'], $where );
+    };
+    $hook_seen = array();
+    add_filter( 'getarchives_where', $wrapped_filter, 10, 2 );
+    foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade', 'alpha', 'postbypost' ) as $mode ) {
+        wp_cache_flush();
+        $wpdb->last_error = '';
+        $html = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+            'type' => $mode, 'echo' => 0, 'limit' => 3,
+        ) );
+        $valid_result = is_string( $html ) && '' === $wpdb->last_error &&
+            ( $spec['expect_rows'] ? false !== strpos( $html, '<li>' ) : '' === $html );
+        $assert( 'Final archive SQL preserves ' . $case . ' filter (' . $mode . ')', $valid_result );
+    }
+    $assert( 'WordPress legacy WHERE filter sees prepared source clause (' . $case . ')',
+        isset( $hook_seen[0] ) && false !== strpos(
+            $hook_seen[0], "WHERE post_type = 'post' AND post_status = 'publish'"
+        ) );
+    remove_filter( 'getarchives_where', $wrapped_filter, 10 );
+}
+unset( $legacy_cases, $hook_seen );
+
 $assert( 'Unknown post type returns empty entries', false === strpos(
     do_shortcode( '[chronoarchive type="yearly" post_type="missing_ca_type"]' ), '<a ' ) );
 
