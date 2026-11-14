@@ -129,7 +129,9 @@ jobs:
           set -euo pipefail
           wpcli=(php /tmp/wp-cli.phar --path=/tmp/chrono-upgrade-wp)
           "${wpcli[@]}" plugin install "$PWD/dist/chronoarchive-2.1.0-beta1-ROLLBACK.zip" --force --activate
-          test "$("${wpcli[@]}" plugin get ChronoArchive --field=version)" = '2.1.0-beta1'
+          # The imported beta1 emits whitespace after its final PHP close
+          # tag. Verify the version line instead of strict whole stdout.
+          "${wpcli[@]}" plugin get ChronoArchive --field=version | grep -Fxq '2.1.0-beta1'
           "${wpcli[@]}" eval '
           if ("1" !== get_option("WP_ChronoArchive_options")["use_cpt_archive"]) { exit(2); }
           if (false === strpos(do_shortcode("[chronoarchive type=\"yearly\"]"), "2019")) { exit(3); }
