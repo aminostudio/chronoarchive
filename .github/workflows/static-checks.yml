@@ -56,6 +56,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate metadata schema and i18n domain
         run: python3 scripts/check-release-metadata.py
+      - name: Check installable package against version metadata (every PR)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build-lab-zip.py --output "$RUNNER_TEMP/chronoarchive-beta2-a.zip"
+          python3 scripts/build-lab-zip.py --output "$RUNNER_TEMP/chronoarchive-beta2-b.zip"
+          cmp "$RUNNER_TEMP/chronoarchive-beta2-a.zip" "$RUNNER_TEMP/chronoarchive-beta2-b.zip"
+          unzip -t "$RUNNER_TEMP/chronoarchive-beta2-a.zip"
       - name: Ensure this beta cannot pass the stable-release gate
         shell: bash
         run: |
