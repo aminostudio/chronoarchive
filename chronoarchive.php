@@ -376,6 +376,23 @@ class WP_Plugin_ChronoArchive {
 		$where = apply_filters( 'getarchives_where', $sql_where, $r );
 		$join  = apply_filters( 'getarchives_join', '', $r );
 
+		// Preserve the legacy SQL-fragment hook contract for trusted plugin
+		// callbacks. Malformed filter return values must never be coerced into
+		// SQL or trigger a fatal error in a public shortcode.
+		// SQL fragments from PHP callbacks are *not* user-input parameters:
+		// wpdb::prepare() cannot quote a JOIN or WHERE clause as a value.
+		// Code registering these filters remains responsible for its own
+		// SQL parameterization. Fail closed when the contract is violated.
+		if (
+			! is_string( $where ) ||
+			! is_string( $join ) ||
+			'' === trim( $where ) ||
+			false !== strpos( $where, "\0" ) ||
+			false !== strpos( $join, "\0" )
+		) {
+			return '';
+		}
+
 		$output = '';
 
 		$last_changed = wp_cache_get_last_changed( 'posts' );
@@ -386,9 +403,10 @@ class WP_Plugin_ChronoArchive {
 		// Grouped archives must sort on their grouped date buckets, not raw
 		// post_date. The latter is ambiguous and can fail ONLY_FULL_GROUP_BY.
 		// Sort directions are already allowlisted to ASC/DESC above.
+		// Direct SQL aggregates are cached, but the assembled SQL contains
+		// trusted extension fragments: do not describe the full query as
+		// prepared. The post-type predicate alone is prepared above.
 		// Monthly archives.
-        // Using a direct query here is necessary for efficient archive grouping.
-        // The query is prepared and cached for security and performance.
 		if ( 'monthly' == $r['type'] ) {
 			$query = "SELECT YEAR(post_date) AS `year`, MONTH(post_date) AS `month`, COUNT(DISTINCT $wpdb->posts.ID) AS posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date), MONTH(post_date) ORDER BY `year` $order, `month` $order $limit";
 			$key   = md5( $query );
@@ -425,9 +443,7 @@ class WP_Plugin_ChronoArchive {
 					$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
 				}
 			}
-		// Yearly archives.
-        // Using a direct query here is necessary for efficient archive grouping.
-        // The query is prepared and cached for security and performance.
+		// Yearly archives: grouped SQL and object-cache lookup.
 		} elseif ( 'yearly' == $r['type'] ) {
 			$query = "SELECT YEAR(post_date) AS `year`, COUNT(DISTINCT $wpdb->posts.ID) AS posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date) ORDER BY `year` $order $limit";
 			$key   = md5( $query );
@@ -460,9 +476,7 @@ class WP_Plugin_ChronoArchive {
 					$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
 				}
 			}
-		// Daily archives.
-        // Using a direct query here is necessary for efficient archive grouping.
-        // The query is prepared and cached for security and performance.
+		// Daily archives: grouped SQL and object-cache lookup.
 		} elseif ( 'daily' == $r['type'] ) {
 			$query = "SELECT YEAR(post_date) AS `year`, MONTH(post_date) AS `month`, DAYOFMONTH(post_date) AS `dayofmonth`, COUNT(DISTINCT $wpdb->posts.ID) AS posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date), MONTH(post_date), DAYOFMONTH(post_date) ORDER BY `year` $order, `month` $order, `dayofmonth` $order $limit";
 			$key   = md5( $query );
@@ -487,9 +501,7 @@ class WP_Plugin_ChronoArchive {
 					$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
 				}
 			}
-		// Weekly archives.
-        // Using a direct query here is necessary for efficient archive grouping.
-        // The query is prepared and cached for security and performance.
+		// Weekly archives: grouped SQL and object-cache lookup.
 		} elseif ( 'weekly' == $r['type'] ) {
 			// start_of_week is a validated WordPress option (0=Sunday ... 6=Saturday).
 			$start_day = (int) get_option( 'start_of_week', 1 );
@@ -518,9 +530,7 @@ class WP_Plugin_ChronoArchive {
 					$output .= get_archives_link( $url, $text, $r['format'], $r['before'], $r['after'] );
 				}
 			}
-		// Decade archives.
-        // Using a direct query here is necessary for efficient archive grouping.
-        // The query is prepared and cached for security and performance.
+		// Decade archives: grouped SQL and object-cache lookup.
 		} elseif ( 'decade' == $r['type'] ) {
 			$query = "SELECT COUNT(DISTINCT archive_post_id) AS posts, decade, MAX(decade) + 9 AS end_year FROM (SELECT $wpdb->posts.ID AS archive_post_id, FLOOR(YEAR(post_date) / 10) * 10 AS decade FROM $wpdb->posts $join $where) t GROUP BY decade ORDER BY decade $order $limit";
 			$key   = md5( $query );

@@ -137,3 +137,37 @@ These are **single CI runner measurements, not guarantees or p95/p99 latency res
 The LAB's connected MariaDB reports only **39 published posts**. Its read-only yearly EXPLAIN uses `type_status_date` with estimated 39 rows. The production/laboratory database was **not modified** for performance testing.
 
 **Next evidence to collect:** a second synthetic scale (e.g. 30k or 100k) with multiple repetitions, postmeta JOIN cardinality, and object-cache backends before changing database indexes or choosing query rewrites.
+
+
+## SQL fragment-hook trust boundary (security workstream)
+
+WordPress's established `getarchives_where` and `getarchives_join` hooks accept
+complete SQL clause fragments from **other installed PHP code**. Those
+callbacks are code-level extensions, not public shortcode or form parameters.
+
+- `post_type` is sanitized, checked against a viewable registered post type,
+  and substituted with `$wpdb->prepare(..., %s)` before the hooks run.
+- Sort directions are strict `ASC`/`DESC` allowlists, query type is an enum,
+  and the limit is reduced to an integer. The week start originates in the
+  WordPress option, coerced to integer.
+- Actual SQL clauses supplied by other trusted plugin callbacks are preserved
+  to maintain the existing WordPress archive extension API.
+- Any callback using visitor-controlled data **must prepare its own SQL
+  values**. Replacing a full SQL JOIN/WHERE clause with a `%s` value is not
+  correct escaping and would break the API.
+- This branch fails closed on non-string, empty WHERE and NUL-containing
+  clauses. It does not claim to sanitize a syntactically valid malicious
+  SQL clause supplied by privileged plugin code.
+- Seven archive modes × seven malformed hook results, plus two NUL
+  cases, are now included in disposable WP/MariaDB integration tests.
+  Valid multiplicative JOIN filters retain the unique-post regression tests.
+
+**Plugin Check remains blocking:** the aggregate SQL is still composed from
+filter-provided fragments. The surrounding predicate is prepared but the full
+statement is *not* wholly parameterized, so the earlier comments incorrectly
+calling all six queries "prepared" were removed. The official scanner's
+`DirectDB.UnescapedDBParameter` and `PreparedSQL.NotPrepared` findings should
+be reviewed with a WordPress.org reviewer rather than suppressed.
+
+References: [WordPress wpdb::prepare()](https://developer.wordpress.org/reference/classes/wpdb/prepare/),
+[WordPress PHP coding standards](https://developer.wordpress.org/coding-standards/wordpress-coding-standards/php/).
