@@ -90,7 +90,7 @@ jobs:
           wpcli=(php /tmp/wp-cli.phar --path=/tmp/chrono-upgrade-wp)
           "${wpcli[@]}" plugin install "$PWD/dist/chronoarchive-2.1.0-beta1-ROLLBACK.zip"
           echo 'Installed baseline plugins and exact slugs:'
-          "${wpcli[@]}" plugin list --fields=name,status,version,plugin --format=json
+          "${wpcli[@]}" plugin list --fields=name,status,version --format=json
           echo 'Checking baseline plugin basename and header:'
           "${wpcli[@]}" plugin get ChronoArchive --format=json
           test "$("${wpcli[@]}" plugin get ChronoArchive --field=version)" = '2.1.0-beta1'
