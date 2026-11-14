@@ -62,6 +62,39 @@ foreach ( array( '2019-12-31 12:00:00', '2020-01-01 12:00:00' ) as $date ) {
     $boundary_ids[] = $id;
 }
 
+// Exercise real MariaDB in strict grouping mode before the ordinary archive
+// render suite. WordPress normally removes ONLY_FULL_GROUP_BY from its SQL
+// session, so errors in grouping can otherwise remain invisible in CI.
+$previous_sql_mode = (string) $wpdb->get_var( 'SELECT @@SESSION.sql_mode' );
+$strict_query = $wpdb->query( "SET SESSION sql_mode = 'ONLY_FULL_GROUP_BY'" );
+$strict_enabled = false !== $strict_query &&
+    false !== strpos( (string) $wpdb->get_var( 'SELECT @@SESSION.sql_mode' ), 'ONLY_FULL_GROUP_BY' );
+$assert( 'MariaDB ONLY_FULL_GROUP_BY enabled for archive regression', $strict_enabled );
+if ( $strict_enabled ) {
+    wp_cache_flush();
+    foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade' ) as $bucket_type ) {
+        $wpdb->last_error = '';
+        $strict_html = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+            'type' => $bucket_type, 'order' => 'ASC', 'limit' => 4, 'echo' => 0,
+        ) );
+        $assert( 'Strict SQL ' . $bucket_type . ': no database error', '' === $wpdb->last_error );
+        $assert( 'Strict SQL ' . $bucket_type . ': archive links generated',
+            is_string( $strict_html ) && false !== strpos( $strict_html, '<a ' ) );
+    }
+    // Grouped lists also need deterministic ordering and LIMIT semantics.
+    $strict_year_desc = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+        'type' => 'yearly', 'order' => 'DESC', 'limit' => 2, 'echo' => 0,
+    ) );
+    $assert( 'Strict SQL descending year order and limit',
+        is_string( $strict_year_desc ) &&
+        false !== strpos( $strict_year_desc, '2026' ) &&
+        false !== strpos( $strict_year_desc, '2025' ) &&
+        2 === substr_count( $strict_year_desc, '<li>' ) );
+}
+$restored_sql_mode = $wpdb->query( $wpdb->prepare( 'SET SESSION sql_mode = %s', $previous_sql_mode ) );
+$assert( 'Original database session SQL mode restored', false !== $restored_sql_mode &&
+    $previous_sql_mode === (string) $wpdb->get_var( 'SELECT @@SESSION.sql_mode' ) );
+
 foreach ( array( 'archives', 'arcpromat', 'chronoarchive' ) as $alias ) {
     $assert( 'Alias registered ' . $alias, shortcode_exists( $alias ) );
 }
@@ -162,6 +195,25 @@ $assert( 'Returned LINK archive output strips filtered HTML tags',
     1 === substr_count( $filtered_links, '<link' ) &&
     false === stripos( $filtered_links, '<img' ) &&
     false === stripos( $filtered_links, '<script' ) );
+
+// A cached empty archive is still a successful cache hit. The historical
+// truthy/falsy check queried MariaDB again on every empty result.
+register_post_type( 'ca_empty_cache', array( 'public' => true, 'has_archive' => false ) );
+$cache_initial = $wpdb->num_queries;
+$empty_first = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'post_type' => 'ca_empty_cache', 'echo' => 0,
+) );
+$cache_after_first = $wpdb->num_queries;
+$empty_second = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'post_type' => 'ca_empty_cache', 'echo' => 0,
+) );
+$cache_after_second = $wpdb->num_queries;
+$assert( 'Empty public CPT produces no archive links',
+    '' === $empty_first && '' === $empty_second );
+$assert( 'First empty archive is actually queried', $cache_after_first > $cache_initial );
+$assert( 'Cached empty archive does not repeat its SQL query',
+    $cache_after_second === $cache_after_first );
+unregister_post_type( 'ca_empty_cache' );
 
 $assert( 'Unknown post type returns empty entries', false === strpos(
     do_shortcode( '[chronoarchive type="yearly" post_type="missing_ca_type"]' ), '<a ' ) );
