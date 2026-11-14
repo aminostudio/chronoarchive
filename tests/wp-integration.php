@@ -215,6 +215,45 @@ $assert( 'Cached empty archive does not repeat its SQL query',
     $cache_after_second === $cache_after_first );
 unregister_post_type( 'ca_empty_cache' );
 
+// Publishing and deleting posts must invalidate an already warmed archive.
+// WordPress clean_post_cache() updates the posts last_changed token.
+wp_cache_flush();
+$archive_pre_insert = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'echo' => 0, 'order' => 'ASC',
+) );
+$archive_pre_repeat = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'echo' => 0, 'order' => 'ASC',
+) );
+$assert( 'Cache returns identical warm archive before post changes',
+    is_string( $archive_pre_insert ) && $archive_pre_insert === $archive_pre_repeat );
+$pre_change_token = wp_cache_get_last_changed( 'posts' );
+$cache_test_id = wp_insert_post( array(
+    'post_title' => 'CA Cache Invalidation 1981',
+    'post_date' => '1981-06-15 12:00:00',
+    'post_status' => 'publish',
+    'post_type' => 'post',
+), true );
+$cache_test_created = ! is_wp_error( $cache_test_id ) && (int) $cache_test_id > 0;
+$assert( 'Archive invalidation fixture created', $cache_test_created );
+if ( $cache_test_created ) {
+    $after_insert_token = wp_cache_get_last_changed( 'posts' );
+    $archive_post_insert = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+        'type' => 'yearly', 'echo' => 0, 'order' => 'ASC',
+    ) );
+    $assert( 'Publishing an article invalidates posts cache generation',
+        $pre_change_token !== $after_insert_token );
+    $assert( 'Published article appears in refreshed historical archive',
+        false === strpos( $archive_pre_insert, '1981' ) &&
+        false !== strpos( $archive_post_insert, '1981' ) );
+    wp_delete_post( (int) $cache_test_id, true );
+    $archive_after_delete = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+        'type' => 'yearly', 'echo' => 0, 'order' => 'ASC',
+    ) );
+    $assert( 'Deleted article disappears from refreshed archive',
+        is_string( $archive_after_delete ) &&
+        false === strpos( $archive_after_delete, '1981' ) );
+}
+
 
 // The legacy SQL filters are *trusted code extension points*, not user input.
 // Non-string fragments must not become SQL, cause PHP warnings, or return

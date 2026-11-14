@@ -339,6 +339,38 @@ class WP_Plugin_ChronoArchive {
 		return is_string( $prepared ) ? $prepared : '';
 	}
 
+
+	/**
+	 * Execute and cache one already-finalized archive SQL statement.
+	 *
+	 * Keep the six inherited aggregate queries behind ONE audited SQL sink.
+	 * Their SQL includes trusted WordPress getarchives_where/getarchives_join
+	 * extension fragments, which remain the responsibility of the registering
+	 * PHP callback. Passing a whole fragment as an SQL string value to
+	 * wpdb::prepare() would be incorrect.
+	 *
+	 * Cache keys intentionally preserve the historical format so an empty
+	 * result is a valid cache hit, and a WordPress posts last_changed update
+	 * invalidates the archive without manual cache deletion.
+	 *
+	 * @param string $query        Final SQL, already rebound where possible.
+	 * @param string $last_changed WordPress posts cache-generation token.
+	 * @return array|null Archive rows or empty/null on database failure.
+	 */
+	private static function cached_archive_rows( $query, $last_changed ) {
+		global $wpdb;
+
+		$key = 'wp_get_archives_advanced:' . md5( $query ) . ':' . $last_changed;
+		$results = wp_cache_get( $key, 'posts' );
+
+		if ( false === $results ) {
+			$results = $wpdb->get_results( $query );
+			wp_cache_set( $key, $results, 'posts' );
+		}
+
+		return $results;
+	}
+
 	/**
 	 * Advanced wp_get_archives.
 	 *
@@ -466,13 +498,7 @@ class WP_Plugin_ChronoArchive {
 			if ( '' === $query ) {
 				return '';
 			}
-			$key   = md5( $query );
-			$key   = "wp_get_archives_advanced:$key:$last_changed";
-			$results = wp_cache_get( $key, 'posts' );
-			if ( false === $results ) {
-				$results = $wpdb->get_results( $query );
-				wp_cache_set( $key, $results, 'posts' );
-			}
+			$results = self::cached_archive_rows( $query, $last_changed );
 			if ( $results ) {
 				$after = $r['after'];
 				foreach ( (array) $results as $result ) {
@@ -507,13 +533,7 @@ class WP_Plugin_ChronoArchive {
 			if ( '' === $query ) {
 				return '';
 			}
-			$key   = md5( $query );
-			$key   = "wp_get_archives_advanced:$key:$last_changed";
-			$results = wp_cache_get( $key, 'posts' );
-			if ( false === $results ) {
-				$results = $wpdb->get_results( $query );
-				wp_cache_set( $key, $results, 'posts' );
-			}
+			$results = self::cached_archive_rows( $query, $last_changed );
 			if ( $results ) {
 				$after = $r['after'];
 				foreach ( (array) $results as $result ) {
@@ -544,13 +564,7 @@ class WP_Plugin_ChronoArchive {
 			if ( '' === $query ) {
 				return '';
 			}
-			$key   = md5( $query );
-			$key   = "wp_get_archives_advanced:$key:$last_changed";
-			$results = wp_cache_get( $key, 'posts' );
-			if ( false === $results ) {
-				$results = $wpdb->get_results( $query );
-				wp_cache_set( $key, $results, 'posts' );
-			}
+			$results = self::cached_archive_rows( $query, $last_changed );
 			if ( $results ) {
 				$after = $r['after'];
 				foreach ( (array) $results as $result ) {
@@ -576,13 +590,7 @@ class WP_Plugin_ChronoArchive {
 			if ( '' === $query ) {
 				return '';
 			}
-			$key   = md5( $query );
-			$key   = "wp_get_archives_advanced:$key:$last_changed";
-			$results = wp_cache_get( $key, 'posts' );
-			if ( false === $results ) {
-				$results = $wpdb->get_results( $query );
-				wp_cache_set( $key, $results, 'posts' );
-			}
+			$results = self::cached_archive_rows( $query, $last_changed );
 			if ( $results ) {
 				$after = $r['after'];
 				foreach ( (array) $results as $result ) {
@@ -606,13 +614,7 @@ class WP_Plugin_ChronoArchive {
 			if ( '' === $query ) {
 				return '';
 			}
-			$key   = md5( $query );
-			$key   = "wp_get_archives_advanced:$key:$last_changed";
-			$results = wp_cache_get( $key, 'posts' );
-			if ( false === $results ) {
-				$results = $wpdb->get_results( $query );
-				wp_cache_set( $key, $results, 'posts' );
-			}
+			$results = self::cached_archive_rows( $query, $last_changed );
 			if ( $results ) {
 				$after = $r['after'];
 				foreach ( (array) $results as $result ) {
@@ -643,13 +645,7 @@ class WP_Plugin_ChronoArchive {
 			if ( '' === $query ) {
 				return '';
 			}
-			$key     = md5( $query );
-			$key     = "wp_get_archives_advanced:$key:$last_changed";
-			$results = wp_cache_get( $key, 'posts' );
-			if ( false === $results ) {
-				$results = $wpdb->get_results( $query );
-				wp_cache_set( $key, $results, 'posts' );
-			}
+			$results = self::cached_archive_rows( $query, $last_changed );
 			if ( $results ) {
 				foreach ( (array) $results as $result ) {
 					if ( $result->post_date != '0000-00-00 00:00:00' ) {
