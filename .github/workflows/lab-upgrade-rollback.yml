@@ -88,8 +88,15 @@ jobs:
         run: |
           set -euo pipefail
           wpcli=(php /tmp/wp-cli.phar --path=/tmp/chrono-upgrade-wp)
-          "${wpcli[@]}" plugin install "$PWD/dist/chronoarchive-2.1.0-beta1-ROLLBACK.zip" --activate
+          "${wpcli[@]}" plugin install "$PWD/dist/chronoarchive-2.1.0-beta1-ROLLBACK.zip"
+          echo 'Installed baseline plugins and exact slugs:'
+          "${wpcli[@]}" plugin list --fields=name,status,version,plugin --format=json
+          echo 'Checking baseline plugin basename and header:'
+          "${wpcli[@]}" plugin get ChronoArchive --format=json
           test "$("${wpcli[@]}" plugin get ChronoArchive --field=version)" = '2.1.0-beta1'
+          echo 'Activate original beta1:'
+          "${wpcli[@]}" plugin activate ChronoArchive
+          "${wpcli[@]}" eval 'echo implode(",", get_option("active_plugins", array()));'
           "${wpcli[@]}" eval 'update_option("WP_ChronoArchive_options", array("use_cpt_archive"=>"1", "custom_css"=>""));'
           "${wpcli[@]}" post create --post_title='CA Upgrade 2019 Fixture' \
             --post_date='2019-12-28 10:00:00' --post_status=publish --porcelain >/dev/null
