@@ -86,3 +86,54 @@ The release-readiness workflow correctly blocks `2.1.0-beta1` as a prerelease. O
 WordPress Plugin Check can also report false positives on prepared queries stored in intermediate variables, but that does not prove these dynamic queries secure. Consult the [WordPress prepare() API](https://developer.wordpress.org/reference/classes/wpdb/prepare/).
 
 Next milestone: isolated large-corpus SQL query plans, hook-compatibility and cache invalidation tests, and source-level security rationale for each query.
+
+
+## Automated large-corpus query-plan benchmark (CI only)
+
+The stacked benchmark adds `tests/wp-performance.php`, guarded by **all three
+conditions**: `GITHUB_ACTIONS=true`, the exact test-site title `chronoarchive-ci`,
+and the disposable `/tmp/chrono-wp/` WordPress path. It **cannot run on the
+LAB or a client WordPress installation**.
+
+Only in the latest WordPress / PHP 8.4 integration job, CI inserts 3,000
+synthetic published posts using batched, parameterized SQL. It then:
+
+- Executes all seven archive modes after flushing cache, with a 24-row limit.
+- Measures each cold-query elapsed time for **diagnostics only**, not an
+  arbitrary timing pass/fail threshold.
+- Validates a successful archive output and an identical warm output.
+- Requires **no repeated aggregate SELECT** on the warm cache call.
+- Captures the actual archive query from the WordPress SAVEQUERIES log.
+- Runs MariaDB `EXPLAIN` on each SQL statement and prints selected index,
+  estimated rows, join access type, and additional sorting/temporary-table
+  operations.
+- Uses an entirely disposable MariaDB database. No production site changes.
+
+**Interpretation:** this is a reproducible smoke benchmark, not production
+capacity planning. Query plans can differ with data distributions, MariaDB
+versions and indexes; a `Using filesort` by itself is not a correctness failure.
+Detailed CI timings and actual execution plans must be read from the workflow
+logs after the job runs.
+
+
+### First reproducible benchmark result: 2026-11-14
+
+[GitHub Actions / WordPress integration run 43554857003](https://github.com/aminostudio/chronoarchive/actions/runs/43554857003), latest WordPress / PHP 8.4, MariaDB 11.x service.
+
+Fixture: **3,000** generated, published posts, plus a few WordPress test posts. All seven real WordPress archive modes generated links, matched their warmed cached output, and logged **zero repeated archive SQL queries** on their second invocation.
+
+| Archive mode | Cold call (ms) | Access plan / index | Estimated examined rows |
+| --- | ---: | --- | ---: |
+| Yearly | 4.62 | ref / type_status_date, filesort | 3,003 |
+| Monthly | 3.94 | ref / type_status_date, filesort | 3,003 |
+| Daily | 4.62 | ref / type_status_date, filesort | 3,003 |
+| Weekly | 7.21 | ref / type_status_date, filesort | 3,003 |
+| Decade | 4.80 | ref / type_status_date, filesort | 3,003 |
+| Alpha | 14.38 | range / type_status_author, filesort | 3,003 |
+| Post by post | 9.44 | range / type_status_date, no filesort reported | 3,003 |
+
+These are **single CI runner measurements, not guarantees or p95/p99 latency results**. The SQL optimizer may choose different plans on 100k+ post installations or with extra JOIN filters. Filesort on an aggregate date expression is expected and not itself evidence of poor performance. No index changes are justified by this one diagnostic run.
+
+The LAB's connected MariaDB reports only **39 published posts**. Its read-only yearly EXPLAIN uses `type_status_date` with estimated 39 rows. The production/laboratory database was **not modified** for performance testing.
+
+**Next evidence to collect:** a second synthetic scale (e.g. 30k or 100k) with multiple repetitions, postmeta JOIN cardinality, and object-cache backends before changing database indexes or choosing query rewrites.
