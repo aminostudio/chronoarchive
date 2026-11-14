@@ -206,3 +206,30 @@ WordPress.org Plugin Check's six direct-query warnings or SQL trust-boundary
 errors are resolved. Variable-based prepared queries may still be flagged
 by the static analyzer. Report the actual scanner results before describing
 the release as ready.
+
+
+## Single audited aggregate-query sink (stacked development PR)
+
+The six archive branches formerly repeated identical `md5(query)` cache keys,
+`wp_cache_get()`, `get_results()` and `wp_cache_set()` logic. This was an
+avoidable maintenance and audit risk: security and cache fixes needed to be
+replicated six times.
+
+The follow-on introduces **one private static `cached_archive_rows()` helper**
+that receives the previously finalized SQL, constructs the exact existing
+cache key and executes the database query on cache misses only. All six
+archive builders still use their existing calculated SQL and WordPress
+legacy hooks. Query result types and empty-result caching behavior do not
+change.
+
+A disposable WordPress test verifies that publishing a historical post
+changes the `posts:last_changed` token and causes that archive year to appear;
+permanently deleting it removes the year again. The existing 3,000-post
+benchmark also verifies warm-cache query reuse for all seven modes.
+
+**Security qualification:** moving six database calls into one function does
+not itself sanitize trusted SQL fragments. The official WordPress Plugin Check
+must be rerun. Its error-count reduction, if any, is a byproduct of having one
+actual SQL execution site, not proof that the dynamic SQL trust-boundary issue
+has been eliminated. Full WordPress.org review remains blocked until those
+fragments and remaining scanner findings are resolved or explicitly reviewed.
