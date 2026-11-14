@@ -40,3 +40,13 @@ Before release:
 - Review week boundaries under different `start_of_week` settings.
 
 **No changes to Amino #LAB, the public landing branch, or any production website.**
+
+## Empty archive caching (second checkpoint)
+
+The five legacy list modes (monthly, yearly, daily, decade, alphabetical/post-by-post) originally treated `[]` from `wp_cache_get()` as a cache miss. Since an empty array can represent a valid result for a public CPT without published posts, every request repeated the same SQL unnecessarily.
+
+These modes now distinguish `false` (actual miss) from empty result sets, matching the existing weekly cache implementation. No cache namespace or invalidation policy changes were made.
+
+The disposable real WordPress integration suite registers an empty public CPT and asserts that its first archive request performs SQL while a repeated request uses the cached empty result. This verifies behavior rather than only scanning source text.
+
+Remaining perf reviews: large post corpora, filtered JOIN cardinality and persistent-object-cache behavior in deployed setups.

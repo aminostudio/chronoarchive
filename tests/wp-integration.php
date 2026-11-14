@@ -196,6 +196,25 @@ $assert( 'Returned LINK archive output strips filtered HTML tags',
     false === stripos( $filtered_links, '<img' ) &&
     false === stripos( $filtered_links, '<script' ) );
 
+// A cached empty archive is still a successful cache hit. The historical
+// truthy/falsy check queried MariaDB again on every empty result.
+register_post_type( 'ca_empty_cache', array( 'public' => true, 'has_archive' => false ) );
+$cache_initial = $wpdb->num_queries;
+$empty_first = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'post_type' => 'ca_empty_cache', 'echo' => 0,
+) );
+$cache_after_first = $wpdb->num_queries;
+$empty_second = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'post_type' => 'ca_empty_cache', 'echo' => 0,
+) );
+$cache_after_second = $wpdb->num_queries;
+$assert( 'Empty public CPT produces no archive links',
+    '' === $empty_first && '' === $empty_second );
+$assert( 'First empty archive is actually queried', $cache_after_first > $cache_initial );
+$assert( 'Cached empty archive does not repeat its SQL query',
+    $cache_after_second === $cache_after_first );
+unregister_post_type( 'ca_empty_cache' );
+
 $assert( 'Unknown post type returns empty entries', false === strpos(
     do_shortcode( '[chronoarchive type="yearly" post_type="missing_ca_type"]' ), '<a ' ) );
 
