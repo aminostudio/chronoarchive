@@ -86,3 +86,31 @@ The release-readiness workflow correctly blocks `2.1.0-beta1` as a prerelease. O
 WordPress Plugin Check can also report false positives on prepared queries stored in intermediate variables, but that does not prove these dynamic queries secure. Consult the [WordPress prepare() API](https://developer.wordpress.org/reference/classes/wpdb/prepare/).
 
 Next milestone: isolated large-corpus SQL query plans, hook-compatibility and cache invalidation tests, and source-level security rationale for each query.
+
+
+## Automated large-corpus query-plan benchmark (CI only)
+
+The stacked benchmark adds `tests/wp-performance.php`, guarded by **all three
+conditions**: `GITHUB_ACTIONS=true`, the exact test-site title `chronoarchive-ci`,
+and the disposable `/tmp/chrono-wp/` WordPress path. It **cannot run on the
+LAB or a client WordPress installation**.
+
+Only in the latest WordPress / PHP 8.4 integration job, CI inserts 3,000
+synthetic published posts using batched, parameterized SQL. It then:
+
+- Executes all seven archive modes after flushing cache, with a 24-row limit.
+- Measures each cold-query elapsed time for **diagnostics only**, not an
+  arbitrary timing pass/fail threshold.
+- Validates a successful archive output and an identical warm output.
+- Requires **no repeated aggregate SELECT** on the warm cache call.
+- Captures the actual archive query from the WordPress SAVEQUERIES log.
+- Runs MariaDB `EXPLAIN` on each SQL statement and prints selected index,
+  estimated rows, join access type, and additional sorting/temporary-table
+  operations.
+- Uses an entirely disposable MariaDB database. No production site changes.
+
+**Interpretation:** this is a reproducible smoke benchmark, not production
+capacity planning. Query plans can differ with data distributions, MariaDB
+versions and indexes; a `Using filesort` by itself is not a correctness failure.
+Detailed CI timings and actual execution plans must be read from the workflow
+logs after the job runs.

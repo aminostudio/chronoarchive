@@ -158,3 +158,14 @@ jobs:
           echo "Invalid decade HTTP status: $malformed_decade_code"
           test "$malformed_decade_code" = 404
           echo 'PASS: invalid decade gives 404'
+
+      - name: Benchmark 3,000 synthetic posts on isolated latest WP / PHP 8.4
+        if: matrix.php == '8.4' && matrix.wp == 'latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar config set SAVEQUERIES true \
+            --raw --path=/tmp/chrono-wp
+          php /tmp/wp-cli.phar eval-file \
+            /tmp/chrono-wp/wp-content/plugins/chronoarchive/tests/wp-performance.php \
+            --path=/tmp/chrono-wp
