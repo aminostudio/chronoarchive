@@ -439,6 +439,15 @@ foreach ( array( 'alpha', 'postbypost' ) as $listing_mode ) {
 }
 remove_action( 'pre_get_posts', $native_spy, 100 );
 
+foreach ( array( 'alpha', 'postbypost' ) as $listing_mode ) {
+    $wpdb->last_error = '';
+    $invalid_numeric = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+        'type' => $listing_mode, 'limit' => 'not-a-number', 'echo' => 0,
+    ) );
+    $assert( 'Malformed nonnumeric listing limit fails closed (' . $listing_mode . ')',
+        '' === $invalid_numeric && '' === $wpdb->last_error );
+}
+
 // Test with a public custom post type, including its two dated published
 // fixtures, to protect non-blog archive support.
 register_post_type( 'ca_native_list', array( 'public' => true, 'has_archive' => true ) );

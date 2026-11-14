@@ -423,13 +423,13 @@ class WP_Plugin_ChronoArchive {
 			$r['type'] = 'yearly';
 		}
 
-		// Keep the numeric limit for the structured WP_Query listing path.
-		// SQL archive modes continue using the historical LIMIT fragment.
-		$listing_limit = ! empty( $r['limit'] ) ? absint( $r['limit'] ) : 0;
-		if ( ! empty( $r['limit'] ) ) {
-			$r['limit'] = $listing_limit;
-			$r['limit'] = ' LIMIT ' . $r['limit'];
-		}
+		// A zero/omitted limit means unlimited. Never append a bare "0"
+		// after ORDER BY: the legacy path produced invalid SQL for limit=0.
+		// Invalid nonempty values preserve a fail-closed SQL LIMIT 0.
+		$limit_present = ! empty( $r['limit'] );
+		$listing_limit = $limit_present ? absint( $r['limit'] ) : 0;
+		$invalid_listing_limit = $limit_present && 0 === $listing_limit;
+		$r['limit'] = $limit_present ? ' LIMIT ' . $listing_limit : '';
 
 		$order = strtoupper( $r['order'] );
 		if ( $order !== 'ASC' ) {
@@ -647,7 +647,7 @@ class WP_Plugin_ChronoArchive {
 			// rather than interpolating SQL for ordinary public listings.
 			// Callbacks on either legacy SQL hook retain their original
 			// behavior and use the specialized query below.
-			if ( ! has_filter( 'getarchives_where' ) && ! has_filter( 'getarchives_join' ) ) {
+			if ( ! $invalid_listing_limit && ! has_filter( 'getarchives_where' ) && ! has_filter( 'getarchives_join' ) ) {
 				$query_args = array(
 					'post_type'              => $r['post_type'],
 					'post_status'            => 'publish',
