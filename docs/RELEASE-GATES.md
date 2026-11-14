@@ -40,7 +40,7 @@ Always identify whether a check was run or merely planned.
 ## LAB beta2 gate (separate from stable publication)
 
 - [ ] Download the reproducible beta2 development ZIP from the successful integration GitHub Actions run.
-- [ ] Confirm the ZIP runtime/attribution allowlist, correct top-level folder and matching version metadata.
+- [ ] Confirm the ZIP runtime/attribution allowlist, **case-sensitive `ChronoArchive/` top-level folder matching the LAB plugin basename**, and matching version metadata.
 - [ ] Back up LAB plugin files and database; retain a working 2.1.0-beta1 rollback path.
 - [ ] Perform authorized administrator-only QA with Under Construction still active for visitors.
 - [ ] Confirm page 70 archives, page 75 private cases, historical week/decade links, CPT links, keyboard navigation, widget settings and cache.

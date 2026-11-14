@@ -27,7 +27,7 @@ review is complete; nothing is merged to `main` by creating this branch.
 - CI: PHP 7.2, 8.2, 8.4, WordPress 6.5.5 and latest, multisite security,
   3,000-post disposable MariaDB plans, browser HTTP archive navigation.
 - Packaging: versioned LAB-only ZIP, reproducible bytes, runtime allowlist,
-  correct `chronoarchive/` root, GPL attribution retained.
+  LAB-specific `ChronoArchive/` root matching the existing case-sensitive plugin folder, GPL attribution retained. A future WordPress.org distribution requires separate review of the lowercase slug.
 
 ## Explicitly NOT passed
 

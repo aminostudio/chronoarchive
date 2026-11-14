@@ -8,13 +8,15 @@ not a production release or WordPress.org-approved plugin.
 
 1. Confirm `labo.aminostudio.fr` is the authorized LAB target and
    `Under Construction` still masks the site for anonymous visitors.
-2. Make and verify a restorable copy of the existing `chronoarchive` plugin
-   directory, the database and the current plugin settings.
+2. Make and verify a restorable copy of the existing `ChronoArchive` plugin
+   directory (`wp-content/plugins/ChronoArchive`, exact capitalization), the database and the current plugin settings.
+   The LAB's plugin has four files and is active as `ChronoArchive/chronoarchive.php`.
+   **Do not install a lowercase `chronoarchive/` package**: on Linux this creates a second plugin directory.
 3. In GitHub Actions, open the integration PR's successful
    **LAB beta2 reproducible ZIP** workflow and download the
    `chronoarchive-2.1.0-beta2-LAB-NOT-PRODUCTION` artifact.
 4. Check the ZIP's `SHA256` from its GitHub Actions build log and confirm
-   it expands to one top-level `chronoarchive/` directory. Never use a
+   it expands to one top-level `ChronoArchive/` directory, matching the installed LAB basename `ChronoArchive/chronoarchive.php`. Never use a
    source-code archive generated automatically by GitHub as the plugin ZIP.
 5. Confirm the code checks pass and the official WordPress Plugin Check
    remains correctly marked **blocked** on its two SQL errors and warning.
@@ -23,7 +25,7 @@ not a production release or WordPress.org-approved plugin.
 
 1. Use the normal WordPress plugin update from ZIP on the LAB only, keeping
    a rollback copy of `2.1.0-beta1`.
-2. Verify that **only** ChronoArchive changes version, and that custom
+2. Verify the plugin basename remains `ChronoArchive/chronoarchive.php` and that **only** ChronoArchive changes version, and that custom
    settings remain intact. Do not touch Amino Privacy, Amino ORBIT or other
    LAB plugins.
 3. Keep Under Construction enabled. Do not open public access merely to
