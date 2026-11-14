@@ -59,3 +59,31 @@ Passing the LAB checks permits only further beta testing, **not** a stable
 GitHub tag, a production recommendation or WordPress.org submission. The
 remaining SQL trust-boundary review, upstream CVEs, and final ZIP Plugin Check
 are separate release blockers.
+
+
+## Controlled upgrade and rollback verification
+
+The [LAB beta1 → beta2 → beta1 CI workflow](../.github/workflows/lab-upgrade-rollback.yml)
+runs on disposable WordPress and MariaDB. It installs a package made from
+the **imported `develop/import-lab-beta1` branch**, adds a dated test post,
+upgrades using the exact beta2 ZIP, verifies the case-sensitive plugin
+basename `ChronoArchive/chronoarchive.php`, shortcodes and stored options,
+then downgrades to beta1 and verifies the same stored data. An imported
+beta1 rollback ZIP is retained in GitHub Actions for seven days.
+
+**Important:** The rollback artifact comes from the imported Git branch,
+not a byte-exact export of the installed LAB directory. The live site's
+own fresh backups are still mandatory before any installation.
+
+### Backup inventory checked 2026-11-14
+
+The connected LAB has one UpdraftPlus backup-history entry dated
+**2026-11-12 23:21:52 UTC** containing recorded database, plugins, themes
+and uploads components. History does **not** prove remote availability,
+archive integrity or successful restoration. Create and verify a fresh
+LAB plugin/files/database backup immediately before the upgrade.
+
+The connected WPVibe CLI emulator does not support arbitrary ZIP uploads.
+A dry-run-like trial with a GitHub source branch URL returned
+`Plugin not found` without any installation. Native WordPress admin ZIP
+upload or authorized server access is required for a live upgrade.

@@ -52,3 +52,16 @@ review is complete; nothing is merged to `main` by creating this branch.
 References: [SQL dossier](SQL-REVIEW-REQUEST.md),
 [LAB acceptance](BETA2-LAB-PLAN.md), [release gates](RELEASE-GATES.md),
 [history](ISSUE-4-SQL-REVIEW.md).
+
+
+## Upgrade and rollback validation
+
+The dedicated [isolated upgrade workflow](../.github/workflows/lab-upgrade-rollback.yml)
+tests installation of imported beta1, in-place beta2 ZIP update and a beta1
+rollback, asserting plugin folder capitalization, persisted options and
+historic archive output. It generates a seven-day rollback artifact.
+
+This test-only artifact comes from the imported source, not the live LAB
+filesystem. A fresh verified site backup is still required before installing
+beta2 on LAB. The connected WPVibe API does not allow direct installation
+of custom ZIP files; no real deployment has been performed by this workflow.
