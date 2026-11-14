@@ -302,6 +302,43 @@ class WP_Plugin_ChronoArchive {
 		}
 	}
 
+
+	/**
+	 * Rebind the validated post type after archive SQL filters have run.
+	 *
+	 * WordPress's legacy getarchives_where hook receives an already-prepared
+	 * WHERE string. If the hook retained that canonical predicate, we can
+	 * replace it with a temporary marker and prepare the COMPLETE statement
+	 * just before executing it, without changing the hook-visible input.
+	 *
+	 * A trusted plugin may replace the entire WHERE clause. In that uncommon
+	 * case the caller preserves the original SQL verbatim for compatibility,
+	 * as WordPress core's wp_get_archives() does. Such a callback owns the
+	 * escaping and safety of its custom SQL; this is not a public input API.
+	 *
+	 * @param string $sql       SQL text, optionally containing our bind marker.
+	 * @param string $post_type Validated, viewable WordPress post type.
+	 * @return string Fully assembled SQL or empty string if preparation fails.
+	 */
+	private static function finalize_archive_sql( $sql, $post_type ) {
+		global $wpdb;
+
+		$marker = 'CHRONOARCHIVE_BOUND_POST_TYPE_91AA';
+		if ( false === strpos( $sql, $marker ) ) {
+			return $sql;
+		}
+		if ( 1 !== substr_count( $sql, $marker ) ) {
+			return '';
+		}
+
+		// Percent signs from DATE_FORMAT or filtered SQL LIKE expressions
+		// are LITERALS, not binding placeholders. Escape them first, then
+		// introduce exactly one real %s placeholder for the validated type.
+		$format = str_replace( $marker, '%s', str_replace( '%', '%%', $sql ) );
+		$prepared = $wpdb->prepare( $format, $post_type );
+		return is_string( $prepared ) ? $prepared : '';
+	}
+
 	/**
 	 * Advanced wp_get_archives.
 	 *
@@ -393,6 +430,22 @@ class WP_Plugin_ChronoArchive {
 			return '';
 		}
 
+		// Apply filters with their WordPress-core-compatible prepared WHERE,
+		// then switch the original canonical predicate to a bind marker.
+		// Typical additive filters remain byte-for-byte equivalent after the
+		// complete statement is prepared. Fully rewritten WHERE clauses are
+		// left intact for backwards compatibility with trusted plugin code.
+		$bind_marker = 'CHRONOARCHIVE_BOUND_POST_TYPE_91AA';
+		if ( false !== strpos( $where, $bind_marker ) ||
+			false !== strpos( $join, $bind_marker ) ) {
+			return '';
+		}
+		$canonical_position = strpos( $where, $sql_where );
+		if ( false !== $canonical_position ) {
+			$canonical_template = "WHERE post_type = $bind_marker AND post_status = 'publish'";
+			$where = substr_replace( $where, $canonical_template, $canonical_position, strlen( $sql_where ) );
+		}
+
 		$output = '';
 
 		$last_changed = wp_cache_get_last_changed( 'posts' );
@@ -403,12 +456,16 @@ class WP_Plugin_ChronoArchive {
 		// Grouped archives must sort on their grouped date buckets, not raw
 		// post_date. The latter is ambiguous and can fail ONLY_FULL_GROUP_BY.
 		// Sort directions are already allowlisted to ASC/DESC above.
-		// Direct SQL aggregates are cached, but the assembled SQL contains
-		// trusted extension fragments: do not describe the full query as
-		// prepared. The post-type predicate alone is prepared above.
+		// Canonical archive queries are rebound with wpdb::prepare() before
+		// execution; trusted hooks that completely rewrite WHERE retain the
+		// WordPress-core SQL-fragment contract for backwards compatibility.
 		// Monthly archives.
 		if ( 'monthly' == $r['type'] ) {
 			$query = "SELECT YEAR(post_date) AS `year`, MONTH(post_date) AS `month`, COUNT(DISTINCT $wpdb->posts.ID) AS posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date), MONTH(post_date) ORDER BY `year` $order, `month` $order $limit";
+			$query = self::finalize_archive_sql( $query, $r['post_type'] );
+			if ( '' === $query ) {
+				return '';
+			}
 			$key   = md5( $query );
 			$key   = "wp_get_archives_advanced:$key:$last_changed";
 			$results = wp_cache_get( $key, 'posts' );
@@ -446,6 +503,10 @@ class WP_Plugin_ChronoArchive {
 		// Yearly archives: grouped SQL and object-cache lookup.
 		} elseif ( 'yearly' == $r['type'] ) {
 			$query = "SELECT YEAR(post_date) AS `year`, COUNT(DISTINCT $wpdb->posts.ID) AS posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date) ORDER BY `year` $order $limit";
+			$query = self::finalize_archive_sql( $query, $r['post_type'] );
+			if ( '' === $query ) {
+				return '';
+			}
 			$key   = md5( $query );
 			$key   = "wp_get_archives_advanced:$key:$last_changed";
 			$results = wp_cache_get( $key, 'posts' );
@@ -479,6 +540,10 @@ class WP_Plugin_ChronoArchive {
 		// Daily archives: grouped SQL and object-cache lookup.
 		} elseif ( 'daily' == $r['type'] ) {
 			$query = "SELECT YEAR(post_date) AS `year`, MONTH(post_date) AS `month`, DAYOFMONTH(post_date) AS `dayofmonth`, COUNT(DISTINCT $wpdb->posts.ID) AS posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date), MONTH(post_date), DAYOFMONTH(post_date) ORDER BY `year` $order, `month` $order, `dayofmonth` $order $limit";
+			$query = self::finalize_archive_sql( $query, $r['post_type'] );
+			if ( '' === $query ) {
+				return '';
+			}
 			$key   = md5( $query );
 			$key   = "wp_get_archives_advanced:$key:$last_changed";
 			$results = wp_cache_get( $key, 'posts' );
@@ -507,6 +572,10 @@ class WP_Plugin_ChronoArchive {
 			$start_day = (int) get_option( 'start_of_week', 1 );
 			$week_start_sql = "DATE_SUB(DATE(post_date), INTERVAL MOD(DAYOFWEEK(post_date) - 1 - $start_day + 7, 7) DAY)";
 			$query = "SELECT DATE_FORMAT($week_start_sql, '%Y-%m-%d') AS week_start, COUNT(DISTINCT $wpdb->posts.ID) AS posts FROM $wpdb->posts $join $where GROUP BY week_start ORDER BY week_start $order $limit";
+			$query = self::finalize_archive_sql( $query, $r['post_type'] );
+			if ( '' === $query ) {
+				return '';
+			}
 			$key   = md5( $query );
 			$key   = "wp_get_archives_advanced:$key:$last_changed";
 			$results = wp_cache_get( $key, 'posts' );
@@ -533,6 +602,10 @@ class WP_Plugin_ChronoArchive {
 		// Decade archives: grouped SQL and object-cache lookup.
 		} elseif ( 'decade' == $r['type'] ) {
 			$query = "SELECT COUNT(DISTINCT archive_post_id) AS posts, decade, MAX(decade) + 9 AS end_year FROM (SELECT $wpdb->posts.ID AS archive_post_id, FLOOR(YEAR(post_date) / 10) * 10 AS decade FROM $wpdb->posts $join $where) t GROUP BY decade ORDER BY decade $order $limit";
+			$query = self::finalize_archive_sql( $query, $r['post_type'] );
+			if ( '' === $query ) {
+				return '';
+			}
 			$key   = md5( $query );
 			$key   = "wp_get_archives_advanced:$key:$last_changed";
 			$results = wp_cache_get( $key, 'posts' );
@@ -566,6 +639,10 @@ class WP_Plugin_ChronoArchive {
 			}
 			$orderby = ( 'alpha' == $r['type'] ) ? 'post_title ' . $alpha_order : 'post_date ' . $post_order . ', ID DESC';
 			$query   = "SELECT DISTINCT $wpdb->posts.ID AS ID, post_title, post_date FROM $wpdb->posts $join $where ORDER BY $orderby $limit";
+			$query = self::finalize_archive_sql( $query, $r['post_type'] );
+			if ( '' === $query ) {
+				return '';
+			}
 			$key     = md5( $query );
 			$key     = "wp_get_archives_advanced:$key:$last_changed";
 			$results = wp_cache_get( $key, 'posts' );

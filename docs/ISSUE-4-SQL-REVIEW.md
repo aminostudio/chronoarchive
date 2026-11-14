@@ -171,3 +171,38 @@ be reviewed with a WordPress.org reviewer rather than suppressed.
 
 References: [WordPress wpdb::prepare()](https://developer.wordpress.org/reference/classes/wpdb/prepare/),
 [WordPress PHP coding standards](https://developer.wordpress.org/coding-standards/wordpress-coding-standards/php/).
+
+
+## Final-statement parameterization with legacy hook compatibility (development)
+
+**Design:** WordPress core passes an already-prepared WHERE string to
+`getarchives_where`. ChronoArchive preserves that exact hook input and the
+existing `getarchives_join` filter. Only **after** those hooks have run:
+
+1. If a trusted filter preserved the canonical, fully rendered WordPress
+   WHERE predicate, temporarily substitute **only that exact predicate**
+   with a unique marker, without touching appended SQL.
+2. After constructing the complete aggregate SQL, escape literal percent
+   signs originating from SQL LIKE fragments and `DATE_FORMAT()`, replace
+   the marker with a single genuine `%s` placeholder and pass the complete
+   query through `$wpdb->prepare()` using the validated, viewable post type.
+3. Reuse the resulting fully assembled SQL string for the original object
+   cache key and `get_results()` call. SQL results and cache behavior should
+   remain equivalent to the inherited code.
+4. If a trusted callback **fully rewrites** the core WHERE predicate, retain
+   its original SQL verbatim for backwards compatibility, as WordPress core
+   itself does. That rare branch is not guaranteed to have a plugin-owned
+   binding and continues to require the filter implementer's own safeguards.
+5. Fail closed on malformed filter types and NUL characters as in PR #16.
+
+**Tests:** Four filter styles (literal SQL LIKE percent, pre-prepared suffix,
+fully rewritten legacy WHERE, and literal `%s` inside a LIKE pattern) are
+exercised over all seven archive types, with assertions that each filter
+receives the originally prepared WordPress WHERE clause.
+
+**Important:** This hardening does **not** magically sanitize arbitrary JOIN
+or WHERE text returned by installed PHP code. It does not imply that the
+WordPress.org Plugin Check's six direct-query warnings or SQL trust-boundary
+errors are resolved. Variable-based prepared queries may still be flagged
+by the static analyzer. Report the actual scanner results before describing
+the release as ready.
