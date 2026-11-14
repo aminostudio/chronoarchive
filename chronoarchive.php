@@ -79,7 +79,6 @@ class WP_Plugin_ChronoArchive {
 		add_action( 'admin_init', array( $this, 'admin_init' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'archive_admin_js_scripts' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'plugin_enqueue_styles' ) );
-		add_action( 'init', array( $this, 'ChronoArchive_load_textdomain' ) );
 
 		// Register shortcodes.
 		add_shortcode('archives', array($this, 'shortcode'));
@@ -91,13 +90,6 @@ class WP_Plugin_ChronoArchive {
 		add_filter( 'query_vars', array($this, 'ChronoArchive_query_vars') );
 		add_filter( 'pre_get_posts', array($this, 'ChronoArchive_decade_filter') );
 		add_filter( 'get_the_archive_title', array($this, 'ChronoArchive_decade_title') );
-	}
-
-	/**
-	 * Load text domain for translations.
-	 */
-	function ChronoArchive_load_textdomain() {
-		load_plugin_textdomain( 'chronoarchive', false, dirname( plugin_basename( __FILE__ ) ) . '/languages/' );
 	}
 
 	/**

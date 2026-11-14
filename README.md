@@ -44,6 +44,6 @@ GitHub and WordPress.org are separate distribution channels. WordPress.org publi
 
 ## Credits and license
 
-GPL-2.0-or-later. Independently maintained fork of **Annual Archive** by Twinpictures. Original attributions and the permissive license notice in the inherited `js/widget_form.js` must be preserved. See [NOTICE.md](NOTICE.md) and [LICENSE](LICENSE).
+GPL-2.0-or-later. Independently maintained fork of **Annual Archive** by Twinpictures. Original attributions and the permissive license notice in the inherited `js/widget_form.js` must be preserved. See [provenance and third-party notices](docs/NOTICE.md) and [LICENSE](LICENSE).
 
 Maintainer: [Amino Studio](https://aminostudio.fr).
