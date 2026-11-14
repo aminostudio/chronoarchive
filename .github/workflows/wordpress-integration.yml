@@ -1,0 +1,171 @@
+name: WordPress integration
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chrono-wp-integration-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+
+jobs:
+  wordpress-integration:
+    name: WP ${{ matrix.wp }} / PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {php: '7.2', wp: '6.5.5'}
+          - {php: '8.2', wp: '6.5.5'}
+          - {php: '8.2', wp: 'latest'}
+          - {php: '8.4', wp: 'latest'}
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: test-only-ci-root
+          MARIADB_DATABASE: chronoarchive_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -u root -ptest-only-ci-root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mysqli, mbstring, zip
+          coverage: none
+      - name: Install isolated WordPress and WP-CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --retry 3 \
+            https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
+            --output /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar --info
+          core_args=()
+          if [[ '${{ matrix.wp }}' != 'latest' ]]; then
+            core_args+=(--version='${{ matrix.wp }}')
+          fi
+          php /tmp/wp-cli.phar core download --path=/tmp/chrono-wp --skip-content "${core_args[@]}"
+          php /tmp/wp-cli.phar config create \
+            --path=/tmp/chrono-wp \
+            --dbname=chronoarchive_ci \
+            --dbuser=root \
+            --dbpass=test-only-ci-root \
+            --dbhost=127.0.0.1:3306
+          php /tmp/wp-cli.phar core install \
+            --path=/tmp/chrono-wp \
+            --url=http://localhost \
+            --title=chronoarchive-ci \
+            --admin_user=ci_admin \
+            --admin_password=ci-only-password-unsafe-to-reuse \
+            --admin_email=ci@example.test \
+            --skip-email
+          mkdir -p /tmp/chrono-wp/wp-content/plugins/chronoarchive
+          cp chronoarchive.php readme.txt /tmp/chrono-wp/wp-content/plugins/chronoarchive/
+          cp -R assets js tests /tmp/chrono-wp/wp-content/plugins/chronoarchive/
+          php /tmp/wp-cli.phar plugin activate chronoarchive --path=/tmp/chrono-wp
+      - name: Run real WordPress integration checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file \
+            /tmp/chrono-wp/wp-content/plugins/chronoarchive/tests/wp-integration.php \
+            --path=/tmp/chrono-wp
+      - name: Test actual HTTP archive URLs (guest visitor)
+        shell: bash
+        run: |
+          set -euo pipefail
+          wpcli=(php /tmp/wp-cli.phar --path=/tmp/chrono-wp)
+          # --skip-content omits all themes. Without a frontend theme WordPress
+          # returns HTTP 200 with an empty body even when WP_Query is valid.
+          "${wpcli[@]}" theme install twentytwentyfour --activate
+          "${wpcli[@]}" option update home 'http://127.0.0.1:8093'
+          "${wpcli[@]}" option update siteurl 'http://127.0.0.1:8093'
+          "${wpcli[@]}" option update start_of_week 1
+          # The PHP built-in server has no Apache/Nginx rewrite rules.
+          # Test actual archive URLs in WordPress's plain-permalink mode;
+          # pretty permalink HTTP routes require a separate web-server matrix.
+          "${wpcli[@]}" post create --post_title='CA HTTP Boundary Dec' \
+            --post_date='2019-12-31 12:00:00' --post_status=publish --porcelain >/dev/null
+          "${wpcli[@]}" post create --post_title='CA HTTP Boundary Jan' \
+            --post_date='2020-01-01 12:00:00' --post_status=publish --porcelain >/dev/null
+          php -S 127.0.0.1:8093 -t /tmp/chrono-wp /tmp/chrono-wp/index.php \
+            >/tmp/chrono-http-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --silent --max-time 3 http://127.0.0.1:8093/ -o /dev/null; then
+              break
+            fi
+            sleep 0.5
+          done
+
+          week_url='http://127.0.0.1:8093/?year=2019&chrono_week=2019-12-30'
+          week_code=$(curl --silent --show-error --max-time 20 \
+            --output /tmp/chrono-week.html --write-out '%{http_code}' "$week_url")
+          echo "Cross-year weekly archive HTTP status: $week_code"
+          test "$week_code" = 200
+          if ! grep -Fq 'CA HTTP Boundary Dec' /tmp/chrono-week.html; then
+            echo 'FAIL: December fixture not found in HTTP archive response'
+            echo 'Response title and body excerpt:'
+            wc -c /tmp/chrono-week.html || true
+            echo 'PHP built-in server log (last 35 lines):'
+            tail -n 35 /tmp/chrono-http-server.log || true
+            grep -Eo '<title>[^<]*</title>' /tmp/chrono-week.html | head -3 || true
+            sed 's/<[^>]*>/ /g' /tmp/chrono-week.html | head -c 1200 || true
+            exit 1
+          fi
+          grep -Fq 'CA HTTP Boundary Jan' /tmp/chrono-week.html
+          echo 'PASS: cross-year week contains the Dec and Jan articles'
+
+          invalid_url='http://127.0.0.1:8093/?year=2024&chrono_week=2024-02-31'
+          invalid_code=$(curl --silent --show-error --max-time 20 \
+            --output /tmp/chrono-invalid.html --write-out '%{http_code}' "$invalid_url")
+          echo "Invalid week HTTP status: $invalid_code"
+          test "$invalid_code" = 404
+          if grep -Eq 'CA HTTP Boundary (Dec|Jan)' /tmp/chrono-invalid.html; then
+            echo 'FAIL: invalid week exposed unrelated content'
+            exit 1
+          fi
+          echo 'PASS: invalid week gives 404 without unrelated archives'
+
+          decade_url='http://127.0.0.1:8093/?year=2010&decade=2010'
+          decade_code=$(curl --silent --show-error --max-time 20 \
+            --output /tmp/chrono-decade.html --write-out '%{http_code}' "$decade_url")
+          echo "Valid decade HTTP status: $decade_code"
+          test "$decade_code" = 200
+          grep -Fq 'CA HTTP Boundary Dec' /tmp/chrono-decade.html
+          if grep -Fq 'CA HTTP Boundary Jan' /tmp/chrono-decade.html; then
+            echo 'FAIL: decade archive included a post from the next decade'
+            exit 1
+          fi
+          echo 'PASS: valid decade excludes the next decade'
+
+          malformed_decade_url='http://127.0.0.1:8093/?year=2010&decade=2015'
+          malformed_decade_code=$(curl --silent --show-error --max-time 20 \
+            --output /tmp/chrono-invalid-decade.html --write-out '%{http_code}' "$malformed_decade_url")
+          echo "Invalid decade HTTP status: $malformed_decade_code"
+          test "$malformed_decade_code" = 404
+          echo 'PASS: invalid decade gives 404'
+
+      - name: Benchmark 3,000 synthetic posts on isolated latest WP / PHP 8.4
+        if: matrix.php == '8.4' && matrix.wp == 'latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar config set SAVEQUERIES true \
+            --raw --path=/tmp/chrono-wp
+          php /tmp/wp-cli.phar eval-file \
+            /tmp/chrono-wp/wp-content/plugins/chronoarchive/tests/wp-performance.php \
+            --path=/tmp/chrono-wp

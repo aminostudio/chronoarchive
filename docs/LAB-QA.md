@@ -37,3 +37,7 @@ A separate non-public draft checked an invalid `tag` (fallback to `ul`), unsafe 
 - Real permalink combinations, CPT archive/no-archive and cross-year weekly queries need tests.
 - WordPress Plugin Check has been installed but its full scan has **not** been run.
 - Test PHP 7.2/8.2/8.4 and claimed WordPress minimum before release.
+
+## Planned beta2 follow-up (not yet installed)
+
+Integration candidate: `2.1.0-beta2`; this page still documents actual **2.1.0-beta1** LAB observations. Do not alter the historical test outcomes until the candidate has been installed and retested. See [BETA2-LAB-PLAN.md](BETA2-LAB-PLAN.md) for authorized installation, QA and rollback.

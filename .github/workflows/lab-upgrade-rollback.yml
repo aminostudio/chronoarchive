@@ -1,0 +1,147 @@
+name: ChronoArchive LAB beta1-beta2 upgrade and rollback
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chrono-upgrade-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install-upgrade-rollback:
+    name: Isolated WordPress install, upgrade, downgrade
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'integration/')
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: test-only-ci-root
+          MARIADB_DATABASE: chronoarchive_upgrade_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -u root -ptest-only-ci-root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout exact imported LAB beta1 sources for rollback
+        uses: actions/checkout@v4
+        with:
+          ref: develop/import-lab-beta1
+          path: baseline
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mysqli, mbstring, zip
+          coverage: none
+      - name: Build beta2 ZIP and imported beta1 rollback ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build-lab-zip.py --output dist/chronoarchive-2.1.0-beta2-LAB.zip
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
+          import hashlib
+          root = Path('baseline')
+          filenames = ('chronoarchive.php', 'readme.txt', 'assets/js/archive-dropdown.js', 'js/widget_form.js')
+          assert 'Version: 2.1.0-beta1' in (root / 'chronoarchive.php').read_text()
+          output = Path('dist/chronoarchive-2.1.0-beta1-ROLLBACK.zip')
+          with ZipFile(output, 'w', ZIP_DEFLATED) as z:
+              for filename in sorted(filenames):
+                  archive_file = ZipInfo('ChronoArchive/' + filename, (1980, 1, 1, 0, 0, 0))
+                  archive_file.create_system = 3
+                  archive_file.external_attr = 0o100644 << 16
+                  archive_file.compress_type = ZIP_DEFLATED
+                  z.writestr(archive_file, (root / filename).read_bytes(), compress_type=ZIP_DEFLATED, compresslevel=9)
+          with ZipFile(output) as z:
+              assert z.testzip() is None
+              assert all(x.startswith('ChronoArchive/') for x in z.namelist())
+          print('Imported beta1 rollback SHA256', hashlib.sha256(output.read_bytes()).hexdigest())
+          PY
+          unzip -t dist/chronoarchive-2.1.0-beta2-LAB.zip
+          unzip -t dist/chronoarchive-2.1.0-beta1-ROLLBACK.zip
+      - name: Initialize disposable WordPress on MariaDB
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --retry 3 \
+            https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
+            --output /tmp/wp-cli.phar
+          php /tmp/wp-cli.phar core download --path=/tmp/chrono-upgrade-wp --skip-content
+          php /tmp/wp-cli.phar config create --path=/tmp/chrono-upgrade-wp \
+            --dbname=chronoarchive_upgrade_ci --dbuser=root \
+            --dbpass=test-only-ci-root --dbhost=127.0.0.1:3306
+          php /tmp/wp-cli.phar core install --path=/tmp/chrono-upgrade-wp \
+            --url=http://localhost --title=chronoarchive-upgrade-ci \
+            --admin_user=ci_admin --admin_password=ci-test-only-password \
+            --admin_email=ci@example.test --skip-email
+      - name: Install original beta1 and verify stored settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          wpcli=(php /tmp/wp-cli.phar --path=/tmp/chrono-upgrade-wp)
+          "${wpcli[@]}" plugin install "$PWD/dist/chronoarchive-2.1.0-beta1-ROLLBACK.zip"
+          echo 'Installed baseline plugins and exact slugs:'
+          "${wpcli[@]}" plugin list --fields=name,status,version --format=json
+          echo 'Checking baseline plugin basename and header:'
+          "${wpcli[@]}" plugin get ChronoArchive --format=json
+          test "$("${wpcli[@]}" plugin get ChronoArchive --field=version)" = '2.1.0-beta1'
+          # Imported beta1 ends with a PHP closing tag and whitespace.
+          # On a FRESH site WP-CLI refuses activation due to unexpected
+          # output. The LAB ALREADY has this beta1 plugin active. Simulate
+          # that actual existing state without modifying imported sources.
+          "${wpcli[@]}" eval 'update_option("active_plugins", array("ChronoArchive/chronoarchive.php"));'
+          "${wpcli[@]}" eval 'if (!is_plugin_active("ChronoArchive/chronoarchive.php")) { exit(1); }'
+          echo 'PASS: simulated existing active LAB beta1 installation'
+          "${wpcli[@]}" eval 'update_option("WP_ChronoArchive_options", array("use_cpt_archive"=>"1", "custom_css"=>""));'
+          "${wpcli[@]}" post create --post_title='CA Upgrade 2019 Fixture' \
+            --post_date='2019-12-28 10:00:00' --post_status=publish --porcelain >/dev/null
+          "${wpcli[@]}" eval 'if (strpos(do_shortcode("[chronoarchive type=\"yearly\"]"), "2019") === false) { exit(1); }'
+          echo 'PASS: original 2.1.0-beta1 installed and archived fixture'
+      - name: Upgrade from exact LAB beta2 package without duplicate plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          wpcli=(php /tmp/wp-cli.phar --path=/tmp/chrono-upgrade-wp)
+          "${wpcli[@]}" plugin install "$PWD/dist/chronoarchive-2.1.0-beta2-LAB.zip" --force --activate
+          test "$("${wpcli[@]}" plugin get ChronoArchive --field=version)" = '2.1.0-beta2'
+          test -f /tmp/chrono-upgrade-wp/wp-content/plugins/ChronoArchive/chronoarchive.php
+          test ! -d /tmp/chrono-upgrade-wp/wp-content/plugins/chronoarchive
+          "${wpcli[@]}" eval '
+          $active = get_option("active_plugins", array());
+          if (1 !== count(array_filter($active, static function($x) { return "ChronoArchive/chronoarchive.php" === $x; }))) { exit(1); }
+          if ("1" !== get_option("WP_ChronoArchive_options")["use_cpt_archive"]) { exit(2); }
+          if (false === strpos(do_shortcode("[chronoarchive type=\"yearly\"]"), "2019")) { exit(3); }
+          if (false === strpos(do_shortcode("[archives type=\"yearly\"]"), "2019")) { exit(4); }
+          '
+          echo 'PASS: upgraded in-place, no duplicate folder, settings and archive data retained'
+      - name: Roll back to beta1 and verify site data intact
+        shell: bash
+        run: |
+          set -euo pipefail
+          wpcli=(php /tmp/wp-cli.phar --path=/tmp/chrono-upgrade-wp)
+          "${wpcli[@]}" plugin install "$PWD/dist/chronoarchive-2.1.0-beta1-ROLLBACK.zip" --force --activate
+          # The imported beta1 emits whitespace after its final PHP close
+          # tag. Verify the version line instead of strict whole stdout.
+          "${wpcli[@]}" plugin get ChronoArchive --field=version | grep -Fxq '2.1.0-beta1'
+          "${wpcli[@]}" eval '
+          if ("1" !== get_option("WP_ChronoArchive_options")["use_cpt_archive"]) { exit(2); }
+          if (false === strpos(do_shortcode("[chronoarchive type=\"yearly\"]"), "2019")) { exit(3); }
+          '
+          test ! -d /tmp/chrono-upgrade-wp/wp-content/plugins/chronoarchive
+          echo 'PASS: rollback to original beta1 branch, options and post intact'
+      - name: Upload test-only rollback ZIP, not a site snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: chronoarchive-2.1.0-beta1-IMPORTED-ROLLBACK
+          path: dist/chronoarchive-2.1.0-beta1-ROLLBACK.zip
+          retention-days: 7
+          if-no-files-found: error

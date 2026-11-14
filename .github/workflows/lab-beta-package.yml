@@ -1,0 +1,39 @@
+name: LAB beta2 reproducible ZIP
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lab-beta-package:
+    name: Build and verify LAB-only package
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'integration/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check development metadata
+        run: python3 scripts/check-release-metadata.py
+      - name: Build two identical LAB archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build-lab-zip.py \
+            --output dist/chronoarchive-2.1.0-beta2-LAB.zip
+          python3 scripts/build-lab-zip.py \
+            --output dist/repeat/chronoarchive-2.1.0-beta2-LAB.zip
+          cmp dist/chronoarchive-2.1.0-beta2-LAB.zip \
+            dist/repeat/chronoarchive-2.1.0-beta2-LAB.zip
+          unzip -t dist/chronoarchive-2.1.0-beta2-LAB.zip
+          sha256sum dist/chronoarchive-2.1.0-beta2-LAB.zip
+          php -l chronoarchive.php
+      - name: Upload private QA workflow artifact (not a release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: chronoarchive-2.1.0-beta2-LAB-NOT-PRODUCTION
+          path: dist/chronoarchive-2.1.0-beta2-LAB.zip
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0

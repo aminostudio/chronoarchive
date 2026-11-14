@@ -2,7 +2,7 @@
 
 **Chronological archives for WordPress.** A community-maintained GPL fork of **Annual Archive** by Twinpictures.
 
-> **Development beta.** The current laboratory version is `2.1.0-beta1`. It has not completed a security audit, wide compatibility testing, or WordPress.org review. Do not install it on production sites.
+> **Development beta.** The LAB is still running `2.1.0-beta1`. A separate `2.1.0-beta2` integration candidate is being prepared and has **not** been deployed. Its SQL review and WordPress.org approval remain open; do not install it on production sites.
 
 ## Features
 
@@ -32,11 +32,11 @@ The `develop/import-lab-beta1` branch imports the four files installed on [Amino
 
 A fixture dataset of 30 dated posts (1997–2026), plus eight older test posts, supports 11 archive demonstrations. The WordPress-rendered archive lists matched SQL counts; direct navigation remains obscured by the laboratory's Under Construction plugin. See [the QA notes](docs/LAB-QA.md).
 
-The `readme.txt`, plugin header, classic widget and admin screen still require remediation. Their presence in the baseline is **not** endorsement.
+The original LAB baseline required repairs to the header, readme, shortcode/widget validation, permissions and SQL. The integration candidate carries reviewed changes and automated regression tests, but **not** stable release approval. See [LAB beta test plan](docs/BETA2-LAB-PLAN.md) and [SQL reviewer dossier](docs/SQL-REVIEW-REQUEST.md).
 
 ## Development
 
-Run `bash scripts/check-static.sh` for syntax checks. Run `wp eval-file scripts/qa-wordpress.php` **only on an isolated, populated WordPress test installation**. The release metadata gate currently fails by design on the uncorrected LAB baseline.
+Run `bash scripts/check-static.sh` for syntax checks. Run `wp eval-file scripts/qa-wordpress.php` **only on an isolated, populated WordPress test installation**. The WordPress.org stable-release gate intentionally rejects the beta version, even when development metadata checks pass.
 
 Consult [release blockers](docs/RELEASE-GATES.md), [security policy](SECURITY.md) and [contribution guide](CONTRIBUTING.md). Make fixes in feature branches with reviewable PRs. Do not tag or publish a stable release until WordPress Plugin Check, security review and full regression testing pass.
 
@@ -44,6 +44,6 @@ GitHub and WordPress.org are separate distribution channels. WordPress.org publi
 
 ## Credits and license
 
-GPL-2.0-or-later. Independently maintained fork of **Annual Archive** by Twinpictures. Original attributions and the permissive license notice in the inherited `js/widget_form.js` must be preserved. See [NOTICE.md](NOTICE.md) and [LICENSE](LICENSE).
+GPL-2.0-or-later. Independently maintained fork of **Annual Archive** by Twinpictures. Original attributions and the permissive license notice in the inherited `js/widget_form.js` must be preserved. See [provenance and third-party notices](docs/NOTICE.md) and [LICENSE](LICENSE).
 
 Maintainer: [Amino Studio](https://aminostudio.fr).

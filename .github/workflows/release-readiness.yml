@@ -1,0 +1,26 @@
+name: WordPress.org release readiness
+
+# Real blocking release gate; draft PRs retain routine PHP/JS checks.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chrono-release-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-metadata:
+    name: Validate WordPress.org metadata
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check WordPress.org metadata
+        run: python3 scripts/check-release-metadata.py --release
