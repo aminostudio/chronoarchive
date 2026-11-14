@@ -1,0 +1,37 @@
+name: Official Plugin Check on exact LAB beta ZIP
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chrono-dist-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  distribution-plugin-check:
+    name: WordPress Plugin Check · packaged beta2
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && startsWith(github.head_ref, 'integration/'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild and extract exact LAB ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build-lab-zip.py --output dist/chronoarchive-2.1.0-beta2-LAB.zip
+          mkdir -p dist/plugin-check-input
+          unzip -q dist/chronoarchive-2.1.0-beta2-LAB.zip -d dist/plugin-check-input
+          test -f dist/plugin-check-input/chronoarchive/chronoarchive.php
+          test -f dist/plugin-check-input/chronoarchive/readme.txt
+      - name: Run official Plugin Check on extracted distribution, no ignores
+        uses: wordpress/plugin-check-action@v1
+        with:
+          build-dir: './dist/plugin-check-input/chronoarchive'
+          slug: chronoarchive
+          # Do not suppress SQL findings, plugin_repo checks or warnings.
+          # This development build is NOT a WordPress.org stable release.
