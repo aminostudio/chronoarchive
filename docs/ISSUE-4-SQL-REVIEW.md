@@ -50,3 +50,20 @@ These modes now distinguish `false` (actual miss) from empty result sets, matchi
 The disposable real WordPress integration suite registers an empty public CPT and asserts that its first archive request performs SQL while a repeated request uses the cached empty result. This verifies behavior rather than only scanning source text.
 
 Remaining perf reviews: large post corpora, filtered JOIN cardinality and persistent-object-cache behavior in deployed setups.
+
+
+## JOIN cardinality regression (follow-on review)
+
+The WordPress `getarchives_join` filter accepts trusted SQL JOIN fragments.
+When such a JOIN yields multiple matching metadata rows for a single post,
+plain `COUNT(ID)` or `COUNT(*)` counts rows rather than distinct published posts.
+Alpha/post-by-post archives can repeat the same permalink.
+
+The development follow-on:
+- Counts distinct post IDs in all five grouped archive modes.
+- Uses `SELECT DISTINCT` for alphabetical and post-by-post link lists.
+- Adds disposable WordPress test data with **two matching postmeta rows**
+  and validates correct counts and unique links through the real filters.
+
+This improves JOIN correctness. Large-corpus query plan benchmarking and
+WordPress.org Plugin Check direct-SQL observations remain separate work.

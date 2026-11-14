@@ -215,6 +215,52 @@ $assert( 'Cached empty archive does not repeat its SQL query',
     $cache_after_second === $cache_after_first );
 unregister_post_type( 'ca_empty_cache' );
 
+// A trusted getarchives_join filter can multiply each post into joined rows.
+// The archive API must count unique posts rather than matching metadata rows.
+$join_post = wp_insert_post( array(
+    'post_title'  => 'CA CI JOIN Cardinality Fixture',
+    'post_date'   => '2016-08-17 14:20:00',
+    'post_status' => 'publish',
+    'post_type'   => 'post',
+), true );
+$assert( 'JOIN cardinality fixture created', ! is_wp_error( $join_post ) );
+if ( ! is_wp_error( $join_post ) ) {
+    $fixture_ids[] = $join_post;
+    add_post_meta( $join_post, 'ca_join_cardinality', 'first' );
+    add_post_meta( $join_post, 'ca_join_cardinality', 'second' );
+    $join_cardinality = static function ( $join ) use ( $wpdb ) {
+        return $join . " INNER JOIN {$wpdb->postmeta} AS ca_join_meta ON ca_join_meta.post_id = {$wpdb->posts}.ID";
+    };
+    $where_cardinality = static function ( $where ) {
+        return $where . " AND ca_join_meta.meta_key = 'ca_join_cardinality'";
+    };
+    add_filter( 'getarchives_join', $join_cardinality, 10, 1 );
+    add_filter( 'getarchives_where', $where_cardinality, 10, 1 );
+
+    foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade' ) as $mode ) {
+        $wpdb->last_error = '';
+        $joined_markup = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+            'type' => $mode, 'show_post_count' => true, 'echo' => 0,
+        ) );
+        $assert( 'JOIN ' . $mode . ' does not produce SQL errors', '' === $wpdb->last_error );
+        $assert( 'JOIN ' . $mode . ' counts one post, not two matching metadata rows',
+            is_string( $joined_markup ) &&
+            1 === substr_count( $joined_markup, '<li>' ) &&
+            1 === substr_count( $joined_markup, '(1)' ) &&
+            false === strpos( $joined_markup, '(2)' ) );
+    }
+    foreach ( array( 'alpha', 'postbypost' ) as $mode ) {
+        $joined_markup = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+            'type' => $mode, 'echo' => 0,
+        ) );
+        $assert( 'JOIN ' . $mode . ' lists each post only once',
+            is_string( $joined_markup ) && 1 === substr_count( $joined_markup, '<li>' ) );
+    }
+    remove_filter( 'getarchives_join', $join_cardinality, 10 );
+    remove_filter( 'getarchives_where', $where_cardinality, 10 );
+}
+
+
 $assert( 'Unknown post type returns empty entries', false === strpos(
     do_shortcode( '[chronoarchive type="yearly" post_type="missing_ca_type"]' ), '<a ' ) );
 
