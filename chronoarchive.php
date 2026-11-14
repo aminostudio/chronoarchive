@@ -31,8 +31,12 @@ class WP_Plugin_ChronoArchive {
 	 *
 	 * @var string
 	 */
+	// One version constant for all plugin entry points and frontend assets.
+	// The header and WordPress.org readme are verified against it in CI.
+	const VERSION = '2.1.0-beta2';
+
 	var $plugin_name = 'ChronoArchive';
-	var $version = '2.1.0-beta2';
+	var $version = self::VERSION;
 	// Historical Settings API group, not the translation text domain.
 	// Preserve the original value for existing settings and fallback options.
 	var $domain = 'ChronoArchive';
@@ -938,7 +942,7 @@ class ChronoArchive_Widget extends WP_Widget {
 
 		if ( $format == 'option' ) {
 			$select_id = wp_unique_id( 'chronoarchive-select-' );
-			wp_enqueue_script( 'chronoarchive-dropdown', plugins_url( 'assets/js/archive-dropdown.js', __FILE__ ), array(), $this->version, true );
+			wp_enqueue_script( 'chronoarchive-dropdown', plugins_url( 'assets/js/archive-dropdown.js', __FILE__ ), array(), WP_Plugin_ChronoArchive::VERSION, true );
 			$dtitle = $select_text ? $select_text : ( $type == 'monthly' ? __( 'Select Month', 'chronoarchive' ) : ( $type == 'weekly' ? __( 'Select Week', 'chronoarchive' ) : ( $type == 'daily' ? __( 'Select Day', 'chronoarchive' ) : ( $type == 'postbypost' || $type == 'alpha' ? __( 'Select Post', 'chronoarchive' ) : __( 'Select Year', 'chronoarchive' ) ) ) ) );
 			?>
 			<label for="<?php echo esc_attr( $select_id ); ?>" class="screen-reader-text"><?php esc_html_e( 'Choose archive', 'chronoarchive' ); ?></label>

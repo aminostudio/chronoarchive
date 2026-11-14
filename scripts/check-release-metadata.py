@@ -79,6 +79,13 @@ def main() -> int:
             errors.append(f"{key}: header {a!r} does not match readme {b!r}")
 
     version = field(header, "Version", php_header=True)
+    version_constant = re.search(
+        r"(?m)^\s*const\s+VERSION\s*=\s*'([^']+)';", php_src
+    )
+    if not version_constant or version_constant.group(1) != version:
+        errors.append("Plugin VERSION constant differs from the header version")
+    if not re.search(r"(?m)^\s*var\s+\$version\s*=\s*self::VERSION;", php_src):
+        errors.append("Plugin version property must reference self::VERSION")
     stable = field(readme, "Stable tag")
     if version and stable and stable not in (version, "trunk"):
         errors.append(f"Stable tag {stable!r} differs from Version {version!r}")

@@ -44,10 +44,12 @@ def verify_source() -> dict[str, bytes]:
 
     header_version = exactly_one(r"^Version:\s*(\S+)\s*$", php, "Plugin header")
     class_version = exactly_one(
-        r"^\s*var\s+\$version\s*=\s*'([^']+)';",
+        r"^\s*const\s+VERSION\s*=\s*'([^']+)';",
         php,
-        "PHP plugin version property",
+        "PHP plugin shared VERSION constant",
     )
+    if not re.search(r"(?m)^\s*var\s+\$version\s*=\s*self::VERSION;", php):
+        raise ValueError("Main plugin version property must reference self::VERSION")
     readme_version = exactly_one(r"^Stable tag:\s*(\S+)\s*$", readme, "readme.txt")
     if {header_version, class_version, readme_version} != {EXPECTED_VERSION}:
         raise ValueError(

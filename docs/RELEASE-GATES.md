@@ -19,7 +19,7 @@
 
 ## P1 improvements
 
-- [ ] Replace legacy `extract( $args )` in widget rendering.
+- [x] Replace legacy `extract( $args )` in widget rendering (confirmed absent; wrappers are explicitly allowlisted).
 - [ ] Normalize PHP formatting and use the lowercase `chronoarchive` text domain throughout.
 - [ ] Check dropdown behavior and duplicate IDs when multiple widgets and shortcodes are rendered.
 - [ ] Add multisite, custom post type, and block-theme browser tests.
@@ -64,3 +64,23 @@ The [upstream XSS advisory inventory](UPSTREAM-CVE-MAPPING.md) now includes
 CVE-2024-33598. The existing PHP escapes shortcode/administration/widget
 output and the CI suite includes malicious attribute tests; do not equate
 those tests with independent disclosure-specific exploit confirmation.
+
+
+### Follow-on widget asset bugfix (Git branch only; LAB not updated)
+
+The classic widget's dropdown called `wp_enqueue_script()` using
+`$this->version`, but `ChronoArchive_Widget` is not the main plugin class
+and has no `version` property. PHP 8.x can emit undefined-property warnings
+on the **widget-only** dropdown path. Fix: share a single
+`WP_Plugin_ChronoArchive::VERSION` class constant with the main
+plugin's version property; the shortcode and widget use that source.
+
+New real WordPress tests verify the widget's script version after
+deregistering the handle, capture undefined-property warnings, check
+unique select IDs across two shortcode instances plus the widget, and
+ensure each select has its own accessible label. The metadata and
+reproducible ZIP checks now enforce consistency of the shared constant.
+
+**Deployment status:** this follow-on fix is a stacked development PR.
+The LAB remains on the previously installed `2.1.0-beta2` ZIP until
+a separately packaged and accepted update is deployed.

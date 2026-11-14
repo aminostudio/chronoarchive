@@ -642,6 +642,59 @@ $assert( 'Classic widget renders archive links', false !== strpos( $widget_outpu
 $assert( 'Trusted widget theme wrappers are preserved', false !== strpos( $widget_output, '<aside>' ) &&
     false !== strpos( $widget_output, '</aside>' ) );
 
+// A classic WP_Widget is NOT the main plugin instance: $this->version
+// would be an undefined property here on PHP 8.x. Deregister to prove
+// that the widget itself supplies the correct JS version on first use.
+wp_dequeue_script( 'chronoarchive-dropdown' );
+wp_deregister_script( 'chronoarchive-dropdown' );
+$widget_version_warnings = array();
+$old_error_handler = set_error_handler(
+    static function ( $severity, $message ) use ( &$widget_version_warnings ) {
+        if ( false !== strpos( $message, 'version' ) ) {
+            $widget_version_warnings[] = $message;
+        }
+        return false;
+    }
+);
+ob_start();
+$widget->widget( array( 'before_widget' => '<aside>', 'after_widget' => '</aside>' ),
+    array( 'type' => 'yearly', 'format' => 'option', 'limit' => 3 ) );
+$widget_option_html = ob_get_clean();
+restore_error_handler();
+$dropdown_registration = wp_scripts()->registered['chronoarchive-dropdown'] ?? null;
+$assert( 'Classic widget dropdown registers plugin-versioned JavaScript',
+    $dropdown_registration &&
+    WP_Plugin_ChronoArchive::VERSION === $dropdown_registration->ver );
+$assert( 'Classic widget does not access an undefined version property',
+    array() === $widget_version_warnings );
+$assert( 'Classic widget emits accessible archive select',
+    false !== strpos( $widget_option_html, '<select' ) &&
+    false !== strpos( $widget_option_html, 'screen-reader-text' ) );
+
+// Each shortcode and widget dropdown must have a unique ID in one page,
+// with a matching accessible label, even with repeated content.
+$two_dropdowns = array(
+    do_shortcode( '[chronoarchive type="yearly" format="option" limit="2"]' ),
+    do_shortcode( '[archives type="monthly" format="option" limit="2"]' ),
+    $widget_option_html,
+);
+$dropdown_ids = array();
+$dropdowns_have_labels = true;
+foreach ( $two_dropdowns as $dropdown_html ) {
+    if ( preg_match( '/<select\b[^>]*\bid="([^"]+)"/', $dropdown_html, $matches ) ) {
+        $dropdown_ids[] = $matches[1];
+        if ( false === strpos( $dropdown_html, 'for="' . $matches[1] . '"' ) ) {
+            $dropdowns_have_labels = false;
+        }
+    } else {
+        $dropdowns_have_labels = false;
+    }
+}
+$assert( 'Multiple widgets and shortcodes use unique select IDs',
+    3 === count( $dropdown_ids ) && 3 === count( array_unique( $dropdown_ids ) ) );
+$assert( 'Each archive select has its own matching accessible label',
+    $dropdowns_have_labels );
+
 // WordPress's edit_css meta capability maps to unfiltered_html and is
 // restricted for multisite site administrators. Exercise both capability
 // paths using a temporary mapping filter on disposable CI only.
