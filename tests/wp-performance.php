@@ -66,12 +66,21 @@ foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade', 'alpha', 'pos
     $duration = ( microtime( true ) - $start ) * 1000;
     $cold_queries = array_slice( $wpdb->queries, $before );
     $query = null;
+    // Grouped archives use SQL aggregates; native alpha/post-by-post now
+    // use WP_Query, which selects posts with a structured WHERE instead.
+    $is_archive_select = static function ( $statement ) use ( $wpdb ) {
+        if ( 0 !== stripos( ltrim( $statement ), 'SELECT ' ) ||
+            false === strpos( $statement, $wpdb->posts ) ) {
+            return false;
+        }
+        return false !== strpos( $statement, 'GROUP BY' ) ||
+            false !== strpos( $statement, 'SELECT DISTINCT' ) ||
+            ( false !== strpos( $statement, 'post_type' ) &&
+              false !== strpos( $statement, 'post_status' ) );
+    };
     foreach ( $cold_queries as $row ) {
-        $statement = $row[0];
-        if ( 0 === stripos( ltrim( $statement ), 'SELECT ' ) &&
-            false !== strpos( $statement, $wpdb->posts ) &&
-            ( false !== strpos( $statement, 'GROUP BY' ) || false !== strpos( $statement, 'SELECT DISTINCT' ) ) ) {
-            $query = $statement;
+        if ( $is_archive_select( $row[0] ) ) {
+            $query = $row[0];
             break;
         }
     }
@@ -80,10 +89,8 @@ foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade', 'alpha', 'pos
         'type' => $mode, 'limit' => 24, 'echo' => 0, 'show_post_count' => 1,
     ) );
     $warm_queries = array_slice( $wpdb->queries, $before_warm );
-    $warm_archive_sql = array_filter( $warm_queries, static function ( $row ) use ( $wpdb ) {
-        return 0 === stripos( ltrim( $row[0] ), 'SELECT ' ) &&
-            false !== strpos( $row[0], $wpdb->posts ) &&
-            ( false !== strpos( $row[0], 'GROUP BY' ) || false !== strpos( $row[0], 'SELECT DISTINCT' ) );
+    $warm_archive_sql = array_filter( $warm_queries, static function ( $row ) use ( $is_archive_select ) {
+        return $is_archive_select( $row[0] );
     } );
     if ( ! is_string( $html ) || '' === $html || $repeat !== $html || null === $query || $warm_archive_sql ) {
         ++$failures;
@@ -106,8 +113,8 @@ foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade', 'alpha', 'pos
             ',extra=' . ( isset( $row['Extra'] ) ? $row['Extra'] : '' );
     }
     echo sprintf(
-        "BENCH %-11s cold_ms=%.2f sql_cold=1 sql_warm=0 links=%d PLAN %s\n",
-        $mode, $duration, substr_count( $html, '<li>' ), implode( ' | ', $access )
+        "BENCH %-11s cold_ms=%.2f sql_cold=%d sql_warm=%d links=%d PLAN %s\n",
+        $mode, $duration, count( array_filter( $cold_queries, static function ( $row ) use ( $is_archive_select ) { return $is_archive_select( $row[0] ); } ) ), count( $warm_archive_sql ), substr_count( $html, '<li>' ), implode( ' | ', $access )
     );
 }
 echo "BENCHMARK RESULT: " . ( $failures ? $failures . ' FAILED' : '7/7 modes passed' ) . "\n";

@@ -423,8 +423,11 @@ class WP_Plugin_ChronoArchive {
 			$r['type'] = 'yearly';
 		}
 
+		// Keep the numeric limit for the structured WP_Query listing path.
+		// SQL archive modes continue using the historical LIMIT fragment.
+		$listing_limit = ! empty( $r['limit'] ) ? absint( $r['limit'] ) : 0;
 		if ( ! empty( $r['limit'] ) ) {
-			$r['limit'] = absint( $r['limit'] );
+			$r['limit'] = $listing_limit;
 			$r['limit'] = ' LIMIT ' . $r['limit'];
 		}
 
@@ -639,13 +642,39 @@ class WP_Plugin_ChronoArchive {
 			if ( $post_order !== 'DESC' ) {
 				$post_order = 'ASC';
 			}
-			$orderby = ( 'alpha' == $r['type'] ) ? 'post_title ' . $alpha_order : 'post_date ' . $post_order . ', ID DESC';
-			$query   = "SELECT DISTINCT $wpdb->posts.ID AS ID, post_title, post_date FROM $wpdb->posts $join $where ORDER BY $orderby $limit";
-			$query = self::finalize_archive_sql( $query, $r['post_type'] );
-			if ( '' === $query ) {
-				return '';
+			// Use WordPress's structured query API when there are no SQL
+			// archive hooks. It handles native post queries and their cache,
+			// rather than interpolating SQL for ordinary public listings.
+			// Callbacks on either legacy SQL hook retain their original
+			// behavior and use the specialized query below.
+			if ( ! has_filter( 'getarchives_where' ) && ! has_filter( 'getarchives_join' ) ) {
+				$query_args = array(
+					'post_type'              => $r['post_type'],
+					'post_status'            => 'publish',
+					'posts_per_page'         => $listing_limit > 0 ? $listing_limit : -1,
+					'ignore_sticky_posts'    => true,
+					'no_found_rows'          => true,
+					'cache_results'          => true,
+					'update_post_meta_cache' => false,
+					'update_post_term_cache' => false,
+					'suppress_filters'       => true,
+					'orderby'                => 'alpha' === $r['type']
+						? 'title' : array( 'date' => $post_order, 'ID' => 'DESC' ),
+					'order'                  => $alpha_order,
+				);
+				$native_query = new WP_Query( $query_args );
+				$results = $native_query->posts;
+			} else {
+				$orderby = ( 'alpha' == $r['type'] )
+					? 'post_title ' . $alpha_order
+					: 'post_date ' . $post_order . ', ID DESC';
+				$query = "SELECT DISTINCT $wpdb->posts.ID AS ID, post_title, post_date FROM $wpdb->posts $join $where ORDER BY $orderby $limit";
+				$query = self::finalize_archive_sql( $query, $r['post_type'] );
+				if ( '' === $query ) {
+					return '';
+				}
+				$results = self::cached_archive_rows( $query, $last_changed );
 			}
-			$results = self::cached_archive_rows( $query, $last_changed );
 			if ( $results ) {
 				foreach ( (array) $results as $result ) {
 					if ( $result->post_date != '0000-00-00 00:00:00' ) {

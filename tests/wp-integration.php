@@ -403,6 +403,75 @@ foreach ( $legacy_cases as $case => $spec ) {
 }
 unset( $legacy_cases, $hook_seen );
 
+
+// Native WP_Query listings must match the specialized SQL fallback in the
+// absence of custom SQL fragments. The no-op archive hook forces fallback
+// without changing its SQL, so output parity is checked for both sort
+// directions and bounded/unbounded lists.
+$noop_where = static function ( $where ) { return $where; };
+$native_observed = 0;
+$native_spy = static function ( $query ) use ( &$native_observed ) {
+    if ( 'post' === $query->get( 'post_type' ) && ! $query->is_main_query() ) {
+        ++$native_observed;
+    }
+};
+add_action( 'pre_get_posts', $native_spy, 100, 1 );
+foreach ( array( 'alpha', 'postbypost' ) as $listing_mode ) {
+    foreach ( array( 'ASC', 'DESC' ) as $direction ) {
+        foreach ( array( 7, 0 ) as $listing_limit ) {
+            $listing_args = array(
+                'type' => $listing_mode, 'echo' => 0,
+                'limit' => $listing_limit, 'alpha_order' => $direction,
+                'post_order' => $direction, 'post_type' => 'post',
+            );
+            wp_cache_flush();
+            $native_before = $native_observed;
+            $native_result = WP_Plugin_ChronoArchive::wp_get_archives_advanced( $listing_args );
+            $assert( 'Native listing uses WP_Query (' . $listing_mode . '/' . $direction . '/' . $listing_limit . ')',
+                $native_observed > $native_before );
+            add_filter( 'getarchives_where', $noop_where, 10, 1 );
+            $legacy_result = WP_Plugin_ChronoArchive::wp_get_archives_advanced( $listing_args );
+            remove_filter( 'getarchives_where', $noop_where, 10 );
+            $assert( 'Native listing matches trusted SQL fallback (' . $listing_mode . '/' . $direction . '/' . $listing_limit . ')',
+                is_string( $native_result ) && $native_result === $legacy_result );
+        }
+    }
+}
+remove_action( 'pre_get_posts', $native_spy, 100 );
+
+// Test with a public custom post type, including its two dated published
+// fixtures, to protect non-blog archive support.
+register_post_type( 'ca_native_list', array( 'public' => true, 'has_archive' => true ) );
+foreach ( array(
+    array( 'First CPT listing entry', '2018-01-04 10:30:00' ),
+    array( 'Second CPT listing entry', '2022-05-06 14:00:00' ),
+) as $details ) {
+    $cpt_fixture = wp_insert_post( array(
+        'post_title' => $details[0], 'post_date' => $details[1],
+        'post_type' => 'ca_native_list', 'post_status' => 'publish',
+    ), true );
+    $assert( 'Public native listing CPT post inserted', ! is_wp_error( $cpt_fixture ) );
+    if ( ! is_wp_error( $cpt_fixture ) ) {
+        $fixture_ids[] = $cpt_fixture;
+    }
+}
+foreach ( array( 'alpha', 'postbypost' ) as $listing_mode ) {
+    $listing_args = array(
+        'type' => $listing_mode, 'echo' => 0, 'post_type' => 'ca_native_list',
+        'alpha_order' => 'ASC', 'post_order' => 'DESC',
+    );
+    wp_cache_flush();
+    $native_result = WP_Plugin_ChronoArchive::wp_get_archives_advanced( $listing_args );
+    add_filter( 'getarchives_where', $noop_where, 10, 1 );
+    $legacy_result = WP_Plugin_ChronoArchive::wp_get_archives_advanced( $listing_args );
+    remove_filter( 'getarchives_where', $noop_where, 10 );
+    $assert( 'Public CPT native listing retains unique links (' . $listing_mode . ')',
+        is_string( $native_result ) && 2 === substr_count( $native_result, '<li>' ) );
+    $assert( 'Public CPT native listing matches legacy output (' . $listing_mode . ')',
+        $native_result === $legacy_result );
+}
+unregister_post_type( 'ca_native_list' );
+
 $assert( 'Unknown post type returns empty entries', false === strpos(
     do_shortcode( '[chronoarchive type="yearly" post_type="missing_ca_type"]' ), '<a ' ) );
 
