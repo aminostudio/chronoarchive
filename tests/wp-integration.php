@@ -215,6 +215,50 @@ $assert( 'Cached empty archive does not repeat its SQL query',
     $cache_after_second === $cache_after_first );
 unregister_post_type( 'ca_empty_cache' );
 
+
+// The legacy SQL filters are *trusted code extension points*, not user input.
+// Non-string fragments must not become SQL, cause PHP warnings, or return
+// private/unfiltered data. Check every mode and both filter hooks independently.
+$invalid_where_values = array( array( 'WHERE post_status=publish' ), null, false, '' );
+$invalid_join_values = array( array( 'JOIN invalid' ), new stdClass(), false );
+foreach ( array( 'getarchives_where' => $invalid_where_values, 'getarchives_join' => $invalid_join_values ) as $hook => $bad_values ) {
+    foreach ( $bad_values as $bad_value ) {
+        $invalid_filter = static function () use ( $bad_value ) {
+            return $bad_value;
+        };
+        add_filter( $hook, $invalid_filter, 10, 1 );
+        foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade', 'alpha', 'postbypost' ) as $mode ) {
+            $before_queries = $wpdb->num_queries;
+            $caught = '';
+            $invalid_output = null;
+            try {
+                $invalid_output = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+                    'type' => $mode, 'echo' => 0,
+                ) );
+            } catch ( Throwable $exception ) {
+                $caught = $exception->getMessage();
+            }
+            $assert( 'Malformed ' . $hook . ' fails closed (' . $mode . ')',
+                '' === $caught && '' === $invalid_output &&
+                $before_queries === $wpdb->num_queries );
+        }
+        remove_filter( $hook, $invalid_filter, 10 );
+    }
+}
+// Embedded NUL bytes should not be passed to MariaDB or used as cache keys.
+foreach ( array( 'getarchives_where', 'getarchives_join' ) as $hook ) {
+    $null_byte = static function ( $sql ) { return $sql . "\0"; };
+    add_filter( $hook, $null_byte, 10, 1 );
+    $before_queries = $wpdb->num_queries;
+    $null_output = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+        'type' => 'yearly', 'echo' => 0,
+    ) );
+    $assert( 'NUL byte in ' . $hook . ' fails closed without executing SQL',
+        '' === $null_output && $before_queries === $wpdb->num_queries );
+    remove_filter( $hook, $null_byte, 10 );
+}
+
+
 // A trusted getarchives_join filter can multiply each post into joined rows.
 // The archive API must count unique posts rather than matching metadata rows.
 $join_post = wp_insert_post( array(
