@@ -499,6 +499,63 @@ foreach ( array( 'alpha', 'postbypost' ) as $listing_mode ) {
 }
 unregister_post_type( 'ca_native_list' );
 
+
+// Audit the final SQL at the wpdb::query boundary, not just rendered HTML.
+// Canonical post_type values are bound via wpdb::prepare() before the legacy
+// WordPress SQL hooks run, as in core wp_get_archives(). Only this disposable
+// WordPress test instance is modified; SQL is inspected, never changed.
+$sql_audit_seen = array();
+$sql_audit_filter = static function ( $statement ) use ( &$sql_audit_seen, $wpdb ) {
+    if ( 0 === stripos( ltrim( $statement ), 'SELECT ' ) &&
+        false !== strpos( $statement, $wpdb->posts ) &&
+        false !== strpos( $statement, 'COUNT(DISTINCT' ) ) {
+        $sql_audit_seen[] = $statement;
+    }
+    return $statement;
+};
+add_filter( 'query', $sql_audit_filter, 10, 1 );
+foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade' ) as $sql_mode ) {
+    wp_cache_flush();
+    $sql_audit_seen = array();
+    $wpdb->last_error = '';
+    $sql_output = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+        'type' => $sql_mode, 'post_type' => 'post', 'echo' => 0, 'limit' => 3,
+    ) );
+    $assert( 'Core-style prepared post type executes archive SQL (' . $sql_mode . ')',
+        is_string( $sql_output ) && '' !== $sql_output &&
+        '' === $wpdb->last_error && 1 === count( $sql_audit_seen ) );
+    $assert( 'Archive SQL has validated published-only predicate (' . $sql_mode . ')',
+        1 === count( $sql_audit_seen ) &&
+        false !== strpos( $sql_audit_seen[0], "WHERE post_type = 'post' AND post_status = 'publish'" ) &&
+        false === strpos( $sql_audit_seen[0], 'CHRONOARCHIVE_BOUND_POST_TYPE' ) );
+}
+// A hostile shortcode/direct API post_type must not become a SQL predicate.
+foreach ( array( "post' OR 1=1 --", array( 'post' ) ) as $unsafe_type ) {
+    $sql_audit_seen = array();
+    $unsafe_result = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+        'type' => 'yearly', 'post_type' => $unsafe_type, 'echo' => 0,
+    ) );
+    $assert( 'Unregistered or malformed post type never reaches MariaDB',
+        '' === $unsafe_result && 0 === count( $sql_audit_seen ) );
+}
+// A hostile LIMIT/order value is normalized to a bounded, allowlisted SQL
+// statement; the attacker-controlled SQL text never enters the query.
+wp_cache_flush();
+$sql_audit_seen = array();
+$hostile_limit = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly',
+    'limit' => '1 UNION SELECT private_post_title',
+    'order' => 'DESC; DELETE FROM wp_posts',
+    'echo' => 0,
+) );
+$assert( 'Untrusted archive SQL fragments are normalized before query',
+    is_string( $hostile_limit ) && 1 === count( $sql_audit_seen ) &&
+    false !== strpos( $sql_audit_seen[0], ' LIMIT 1' ) &&
+    false !== strpos( $sql_audit_seen[0], ' DESC ' ) &&
+    false === strpos( $sql_audit_seen[0], 'UNION SELECT' ) &&
+    false === strpos( $sql_audit_seen[0], 'DELETE FROM' ) );
+remove_filter( 'query', $sql_audit_filter, 10 );
+
 $assert( 'Unknown post type returns empty entries', false === strpos(
     do_shortcode( '[chronoarchive type="yearly" post_type="missing_ca_type"]' ), '<a ' ) );
 

@@ -278,3 +278,42 @@ Normal `pre_get_posts`, `posts_where` and other WordPress PHP callbacks may
 therefore affect the native path in the same way as other ordinary WP_Query
 instances. As always, callbacks are installed code and must handle untrusted
 request data safely.
+
+
+## Follow-on: source parity with core archives, no SQL marker round-trip
+
+The [WordPress `wp_get_archives()` reference implementation](https://developer.wordpress.org/reference/functions/wp_get_archives/)
+already runs `$wpdb->prepare("WHERE post_type = %s AND post_status = 'publish'", $post_type)`
+**before** invoking `getarchives_where` and `getarchives_join`. Both hooks
+receive an SQL fragment, not a placeholder list.
+
+The earlier experimental `finalize_archive_sql()` took that prepared WHERE
+predicate apart, replaced its embedded value with an artificial marker, and
+constructed a second dynamic `$wpdb->prepare($format, $post_type)` call.
+It did not sanitize custom SQL hooks, introduced an extra false-positive
+`PreparedSQL.NotPrepared` at the formatter, and added a complex placeholder
+path for legitimate SQL `%` / `LIKE` patterns.
+
+The current refactoring **removes the extra marker and second prepare call**,
+retains the **original core-style prepared WHERE**, and passes the fully
+assembled SQL to the already centralized, cached aggregate-query sink.
+This is easier to audit and avoids changing a trusted filter's SQL fragments.
+No public argument is ever treated as a raw SQL fragment. The remaining
+external PHP filter contract and its trust limits are unchanged.
+
+### Verification
+- Run all real WordPress modes with the existing percent/LIKE/rewritten WHERE
+  and multiplicative JOIN filters.
+- Inspect SQL at WordPress's real `query` filter: all five grouped modes must
+  execute with an already-escaped published-only post-type predicate.
+- Test that unregistered or malicious post types never execute an archive SQL
+  query, and that hostile public LIMIT/order input is reduced to a validated
+  limit and allowlisted direction.
+- Recheck the actual Plugin Check results. Even if the formatter false positive
+  disappears, the remaining dynamic SQL query remains a human-review blocker.
+- Leave public `main`, deployed LAB and stable tags untouched.
+
+This work **does not** assert that arbitrary SQL text returned from
+installed PHP callbacks is safe, nor claim WordPress.org approval. WordPress
+core itself treats these extension points as trusted code; custom callbacks
+must still prepare any untrusted values they inject.
