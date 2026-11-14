@@ -439,6 +439,24 @@ foreach ( array( 'alpha', 'postbypost' ) as $listing_mode ) {
 }
 remove_action( 'pre_get_posts', $native_spy, 100 );
 
+// Standard WP_Query SQL filters must remain active on the native listing
+// path. WordPress VIP flags suppress_filters=true as a compatibility defect.
+$posts_where_called = 0;
+$native_where_spy = static function ( $where, $query ) use ( &$posts_where_called ) {
+    if ( 'post' === $query->get( 'post_type' ) ) {
+        ++$posts_where_called;
+    }
+    return $where;
+};
+add_filter( 'posts_where', $native_where_spy, 10, 2 );
+WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'alpha', 'post_type' => 'post', 'echo' => 0, 'limit' => 5,
+) );
+remove_filter( 'posts_where', $native_where_spy, 10 );
+$assert( 'Native WP_Query listing preserves core posts_where filters',
+    $posts_where_called > 0 );
+
+
 foreach ( array( 'alpha', 'postbypost' ) as $listing_mode ) {
     $wpdb->last_error = '';
     $invalid_numeric = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(

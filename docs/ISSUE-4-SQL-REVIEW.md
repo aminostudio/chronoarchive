@@ -262,3 +262,19 @@ assuming every mode generates an SQL aggregate.
 modes only, not full removal of custom SQL. Registered filters from any
 third-party plugin force legacy behavior by design. Full WordPress.org
 review remains blocked by the remaining dynamic SQL helper findings.
+
+
+### WordPress native-filter interoperability
+
+The initial `WP_Query` pilot suppressed the native `posts_where` filters, which
+Plugin Check correctly flagged as
+`WordPressVIPMinimum.Performance.WPQueryParams.SuppressFilters_suppress_filters`.
+That option has been removed: default `WP_Query` filters remain enabled.
+A real WordPress test confirms that a registered `posts_where` callback is
+called during the native listing query. Legacy archive SQL fragment hooks
+still select their separate compatibility fallback.
+
+Normal `pre_get_posts`, `posts_where` and other WordPress PHP callbacks may
+therefore affect the native path in the same way as other ordinary WP_Query
+instances. As always, callbacks are installed code and must handle untrusted
+request data safely.

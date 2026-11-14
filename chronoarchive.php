@@ -657,7 +657,8 @@ class WP_Plugin_ChronoArchive {
 					'cache_results'          => true,
 					'update_post_meta_cache' => false,
 					'update_post_term_cache' => false,
-					'suppress_filters'       => true,
+					// Keep normal WP_Query filters enabled, as expected
+					// by WordPress plugins and the Plugin Check VIP rules.
 					'orderby'                => 'alpha' === $r['type']
 						? 'title' : array( 'date' => $post_order, 'ID' => 'DESC' ),
 					'order'                  => $alpha_order,
