@@ -339,7 +339,12 @@ class WP_Plugin_ChronoArchive {
 
 		if ( false === $results ) {
 			$results = $wpdb->get_results( $query );
-			wp_cache_set( $key, $results, 'posts' );
+			// Cache successful empty result sets, but never database errors.
+			// A transient SQL failure must not persist until posts:last_changed
+			// changes, which could otherwise hide recovered archives.
+			if ( is_array( $results ) ) {
+				wp_cache_set( $key, $results, 'posts' );
+			}
 		}
 
 		return $results;
