@@ -970,7 +970,7 @@ $assert( 'Annual Archive 1.6.0 raw saved widget never inserts active admin tags'
     false === stripos( $legacy_form_html, '<img' ) &&
     false === stripos( $legacy_form_html, '<svg' ) &&
     false === stripos( $legacy_form_html, '<script' ) &&
-    false === preg_match( '/<[^>]+\son(?:load|error|click|mouseover)\s*=/i', $legacy_form_html ) );
+    0 === preg_match( '/<[^>]+\son(?:load|error|click|mouseover)\s*=/i', $legacy_form_html ) );
 foreach ( array( 'option', 'html' ) as $legacy_format ) {
     $legacy_raw_instance['format'] = $legacy_format;
     ob_start();
@@ -985,7 +985,7 @@ foreach ( array( 'option', 'html' ) as $legacy_format ) {
     $assert( 'Annual Archive 1.6.0 raw widget has no executable nodes in ' . $legacy_format,
         false === stripos( $legacy_render_html, '<script' ) &&
         false === stripos( $legacy_render_html, '<svg' ) &&
-        false === preg_match( '/<[^>]+\son(?:load|error|click|mouseover)\s*=/i', $legacy_render_html ) &&
+        0 === preg_match( '/<[^>]+\son(?:load|error|click|mouseover)\s*=/i', $legacy_render_html ) &&
         false === stripos( $legacy_render_html, 'href="javascript:' ) );
 }
 
