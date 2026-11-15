@@ -26,6 +26,10 @@ Supported archive modes:
 
 The recommended shortcode is `[chronoarchive]`. The historical `[archives]` and `[arcpromat]` aliases remain available for compatibility.
 
+**Settings & shortcode builder:** In WordPress, open **Settings → ChronoArchive** to configure the default archive type, display (links or dropdown), sort direction, maximum entries, post counts and dropdown placeholder. These defaults apply only when the shortcode does not specify an attribute. The same screen provides a live shortcode generator, copy buttons, six examples, public post type selection, a complete attribute reference and advanced CSS settings.
+
+The generator emits explicit attributes, so a copied shortcode remains consistent if the site-wide defaults change later. The classic widget retains its own per-widget options.
+
 Examples:
 
 `[chronoarchive type="yearly" show_post_count="1"]`
@@ -87,6 +91,7 @@ Amino Studio develops and maintains ChronoArchive. The project repository contai
 * Strict SQL grouping, distinct post counts for custom JOINs, and correct cache invalidation.
 * Native WP_Query for unfiltered alphabetical and post-by-post listings, retaining the legacy SQL hooks.
 * Reproducible WordPress, PHP and MariaDB integration and performance tests.
+* New WordPress admin dashboard with secure global shortcode defaults, live shortcode generator, quick-copy examples and scoped responsive assets.
 * Development-only. SQL human review, inherited-vulnerability review and WordPress.org approval remain open.
 
 = 2.1.0-beta1 =
