@@ -206,6 +206,12 @@ jobs:
           [archives type="monthly" format="option" order="ASC" select_text="Select month"]
           <h2>Alias dropdown</h2>
           [arcpromat type="yearly" format="option" order="ASC" select_text="Select archive"]
+          <h2>Stored shortcode injection regression (CVE-2023-0178)</h2>
+          <div id="chrono-xss-fixture">
+          [archives tag='ul onmouseover="alert(1)"' limit='2']
+          [arcpromat tag='ul onmouseover="alert(1)"' limit='2']
+          [chronoarchive tag='ul onmouseover="alert(1)"' limit='2']
+          </div>
           EOF
           page_id=$("${wpcli[@]}" post create --post_type=page \
             --post_title='ChronoArchive Browser QA' --post_status=publish \
