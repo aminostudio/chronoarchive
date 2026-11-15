@@ -19,58 +19,17 @@ jobs:
         id: beta
         shell: bash
         run: |
-          if grep -Eq '^Version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+-beta[0-9]+[[:space:]]*
-      - name: Build two identical LAB archives
-        if: steps.beta.outputs.enabled == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/build-lab-zip.py \
-            --output dist/chronoarchive-2.1.0-beta3-LAB.zip
-          python3 scripts/build-lab-zip.py \
-            --output dist/repeat/chronoarchive-2.1.0-beta3-LAB.zip
-          cmp dist/chronoarchive-2.1.0-beta3-LAB.zip \
-            dist/repeat/chronoarchive-2.1.0-beta3-LAB.zip
-          unzip -t dist/chronoarchive-2.1.0-beta3-LAB.zip
-          sha256sum dist/chronoarchive-2.1.0-beta3-LAB.zip
-          php -l chronoarchive.php
-      - name: Verify future WordPress.org lowercase package (QA candidate)
-        if: steps.beta.outputs.enabled == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/build-wporg-zip.py --output dist/chronoarchive-2.1.0-beta3-WPORG-QA.zip
-          python3 scripts/build-wporg-zip.py --output dist/repeat/chronoarchive-2.1.0-beta3-WPORG-QA.zip
-          cmp dist/chronoarchive-2.1.0-beta3-WPORG-QA.zip dist/repeat/chronoarchive-2.1.0-beta3-WPORG-QA.zip
-          unzip -t dist/chronoarchive-2.1.0-beta3-WPORG-QA.zip
-          # A prerelease MUST fail the real publish gate.
-          if python3 scripts/build-wporg-zip.py --release --output dist/forbidden-stable.zip; then
-            echo 'FAIL: a beta incorrectly passed the stable package gate'
-            exit 1
-          fi
-          test ! -e dist/forbidden-stable.zip
-          echo 'PASS: lowercase slug QA package deterministic, stable gate blocks beta'
-      - name: Upload private QA workflow artifact (not a release)
-        if: steps.beta.outputs.enabled == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: chronoarchive-2.1.0-beta3-QA-NOT-PRODUCTION
-          path: |
-            dist/chronoarchive-2.1.0-beta3-LAB.zip
-            dist/chronoarchive-2.1.0-beta3-WPORG-QA.zip
-          if-no-files-found: error
-          retention-days: 7
-          compression-level: 0
- chronoarchive.php; then
+          if grep -Eq '^Version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+-beta[0-9]+[[:space:]]*$' chronoarchive.php; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Not a beta: stable releases use the lowercase WordPress.org package."
+            echo "Stable metadata: LAB prerelease package not applicable"
           fi
       - name: Check development metadata
         if: steps.beta.outputs.enabled == 'true'
         run: python3 scripts/check-release-metadata.py
       - name: Build two identical LAB archives
+        if: steps.beta.outputs.enabled == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -84,6 +43,7 @@ jobs:
           sha256sum dist/chronoarchive-2.1.0-beta3-LAB.zip
           php -l chronoarchive.php
       - name: Verify future WordPress.org lowercase package (QA candidate)
+        if: steps.beta.outputs.enabled == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -99,6 +59,7 @@ jobs:
           test ! -e dist/forbidden-stable.zip
           echo 'PASS: lowercase slug QA package deterministic, stable gate blocks beta'
       - name: Upload private QA workflow artifact (not a release)
+        if: steps.beta.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: chronoarchive-2.1.0-beta3-QA-NOT-PRODUCTION
