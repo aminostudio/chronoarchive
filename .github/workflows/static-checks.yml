@@ -64,10 +64,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/build-lab-zip.py --output "$RUNNER_TEMP/chronoarchive-beta2-a.zip"
-          python3 scripts/build-lab-zip.py --output "$RUNNER_TEMP/chronoarchive-beta2-b.zip"
-          cmp "$RUNNER_TEMP/chronoarchive-beta2-a.zip" "$RUNNER_TEMP/chronoarchive-beta2-b.zip"
-          unzip -t "$RUNNER_TEMP/chronoarchive-beta2-a.zip"
+          python3 scripts/build-lab-zip.py --output "$RUNNER_TEMP/chronoarchive-candidate-a.zip"
+          python3 scripts/build-lab-zip.py --output "$RUNNER_TEMP/chronoarchive-candidate-b.zip"
+          cmp "$RUNNER_TEMP/chronoarchive-candidate-a.zip" "$RUNNER_TEMP/chronoarchive-candidate-b.zip"
+          unzip -t "$RUNNER_TEMP/chronoarchive-candidate-a.zip"
       - name: Ensure this beta cannot pass the stable-release gate
         shell: bash
         run: |
