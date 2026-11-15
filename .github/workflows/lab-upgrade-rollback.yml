@@ -1,7 +1,11 @@
-name: ChronoArchive LAB beta1-beta2 upgrade and rollback
+name: ChronoArchive LAB beta1-beta3 upgrade and rollback
 
 on:
   pull_request:
+    paths:
+      - '.github/workflows/lab-upgrade-rollback.yml'
+      - 'chronoarchive.php'
+      - 'scripts/build-lab-zip.py'
   workflow_dispatch:
 
 permissions:
@@ -14,7 +18,13 @@ concurrency:
 jobs:
   install-upgrade-rollback:
     name: Isolated WordPress install, upgrade, downgrade
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'integration/')
+    # Run on the development draft only; a reviewed stable release uses
+    # the separate lowercase ZIP and release-readiness checks.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.draft == true &&
+      (startsWith(github.head_ref, 'integration/') ||
+      github.event.pull_request.base.ref == 'develop/import-lab-beta1'))
     runs-on: ubuntu-latest
     services:
       mariadb:
@@ -41,11 +51,11 @@ jobs:
           php-version: '8.4'
           extensions: mysqli, mbstring, zip
           coverage: none
-      - name: Build beta2 ZIP and imported beta1 rollback ZIP
+      - name: Build beta3 ZIP and imported beta1 rollback ZIP
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/build-lab-zip.py --output dist/chronoarchive-2.1.0-beta2-LAB.zip
+          python3 scripts/build-lab-zip.py --output dist/chronoarchive-2.1.0-beta3-LAB.zip
           python3 - <<'PY'
           from pathlib import Path
           from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
@@ -66,7 +76,7 @@ jobs:
               assert all(x.startswith('ChronoArchive/') for x in z.namelist())
           print('Imported beta1 rollback SHA256', hashlib.sha256(output.read_bytes()).hexdigest())
           PY
-          unzip -t dist/chronoarchive-2.1.0-beta2-LAB.zip
+          unzip -t dist/chronoarchive-2.1.0-beta3-LAB.zip
           unzip -t dist/chronoarchive-2.1.0-beta1-ROLLBACK.zip
       - name: Initialize disposable WordPress on MariaDB
         shell: bash
@@ -106,13 +116,13 @@ jobs:
             --post_date='2019-12-28 10:00:00' --post_status=publish --porcelain >/dev/null
           "${wpcli[@]}" eval 'if (strpos(do_shortcode("[chronoarchive type=\"yearly\"]"), "2019") === false) { exit(1); }'
           echo 'PASS: original 2.1.0-beta1 installed and archived fixture'
-      - name: Upgrade from exact LAB beta2 package without duplicate plugin
+      - name: Upgrade from exact LAB beta3 package without duplicate plugin
         shell: bash
         run: |
           set -euo pipefail
           wpcli=(php /tmp/wp-cli.phar --path=/tmp/chrono-upgrade-wp)
-          "${wpcli[@]}" plugin install "$PWD/dist/chronoarchive-2.1.0-beta2-LAB.zip" --force --activate
-          test "$("${wpcli[@]}" plugin get ChronoArchive --field=version)" = '2.1.0-beta2'
+          "${wpcli[@]}" plugin install "$PWD/dist/chronoarchive-2.1.0-beta3-LAB.zip" --force --activate
+          test "$("${wpcli[@]}" plugin get ChronoArchive --field=version)" = '2.1.0-beta3'
           test -f /tmp/chrono-upgrade-wp/wp-content/plugins/ChronoArchive/chronoarchive.php
           test ! -d /tmp/chrono-upgrade-wp/wp-content/plugins/chronoarchive
           "${wpcli[@]}" eval '
