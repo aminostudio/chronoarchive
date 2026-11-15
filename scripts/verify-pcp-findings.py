@@ -21,6 +21,44 @@ KNOWN_SQL = {
 }
 
 
+def parse_report(text: str) -> object:
+    """Parse either standard JSON or Plugin Check's 'FILE: path' text stream.
+
+    The official wordpress/plugin-check-action@v1 emits sections such as:
+      FILE: chronoarchive.php
+      [{"type":"ERROR", "code":"..."}]
+    They are *not* one top-level JSON document, despite --format=json.
+    """
+    source = text.lstrip("\ufeff").strip()
+    if not source:
+        # Official scanner execution must succeed before a blank clean report
+        # is accepted. This verifier alone does not grant release approval.
+        return {}
+    try:
+        return json.loads(source)
+    except json.JSONDecodeError:
+        pass
+    grouped: dict[str, list[object]] = {}
+    lines = [line.strip() for line in source.splitlines() if line.strip()]
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if not line.startswith("FILE: "):
+            raise ValueError(f"Unexpected scanner report line: {line[:100]}")
+        filename = line[6:].strip()
+        if not filename or filename in grouped or index + 1 >= len(lines):
+            raise ValueError("Duplicate or missing Plugin Check file section")
+        try:
+            data = json.loads(lines[index + 1])
+        except json.JSONDecodeError as error:
+            raise ValueError(f"Malformed Plugin Check JSON for {filename}") from error
+        if not isinstance(data, list):
+            raise ValueError("Plugin Check file findings must be an array")
+        grouped[filename] = data
+        index += 2
+    return grouped
+
+
 def findings_from(raw: object) -> list[tuple[str, str, str]]:
     if not isinstance(raw, dict):
         raise ValueError("Expected Plugin Check's JSON object keyed by file")
@@ -64,7 +102,7 @@ def main(argv: list[str]) -> int:
         print(f"CHECK FAILED: Plugin Check did not produce {path}", file=sys.stderr)
         return 1
     try:
-        raw = json.loads(path.read_text(encoding="utf-8-sig"))
+        raw = parse_report(path.read_text(encoding="utf-8-sig"))
         known, unexpected = evaluate(raw)
     except (OSError, ValueError, UnicodeDecodeError) as error:
         print(f"CHECK FAILED: invalid scanner output: {error}", file=sys.stderr)
