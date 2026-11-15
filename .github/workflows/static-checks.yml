@@ -56,6 +56,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate metadata schema and i18n domain
         run: python3 scripts/check-release-metadata.py
+      - name: Verify Plugin Check advisory guard
+        run: |
+          python3 -m py_compile scripts/verify-pcp-findings.py tests/test-pcp-findings.py
+          python3 tests/test-pcp-findings.py
       - name: Check installable package against version metadata (every PR)
         shell: bash
         run: |
