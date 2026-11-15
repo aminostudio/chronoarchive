@@ -836,12 +836,6 @@ remove_filter( 'map_meta_cap', $deny_edit_css, 10 );
 delete_option( 'WP_ChronoArchive_options' );
 wp_set_current_user( $css_test_user );
 
-// Render administrator settings with a malicious historic textarea value.
-// WordPress esc_textarea() must keep the payload inside the textarea.
-update_option( 'WP_ChronoArchive_options', array(
-    'custom_css' => '</textarea><script>alert(1)</script>',
-    'use_cpt_archive' => '1',
-) );
 // Global settings must apply to omitted attributes on all three shortcode
 // aliases while each explicit shortcode attribute remains authoritative.
 $validated_defaults = $plugin_under_test->sanitize_settings( array(
@@ -893,6 +887,12 @@ $assert( 'Malicious shortcode defaults fail closed',
 delete_option( 'WP_ChronoArchive_options' );
 $plugin_under_test->_set_options();
 
+// Render administrator settings with a malicious historic textarea value.
+// WordPress esc_textarea() must keep the payload inside the textarea.
+update_option( 'WP_ChronoArchive_options', array(
+    'custom_css' => '</textarea><script>alert(1)</script>',
+    'use_cpt_archive' => '1',
+) );
 $old_user = get_current_user_id();
 wp_set_current_user( 1 );
 ob_start();
