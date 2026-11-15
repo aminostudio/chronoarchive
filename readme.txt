@@ -3,7 +3,7 @@ Contributors: aminostudio
 Tags: archives, shortcode, widget, date archives, custom post types
 Requires at least: 6.5
 Tested up to: 7.1
-Stable tag: 2.1.0-beta2
+Stable tag: 2.1.0-beta3
 Requires PHP: 7.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -46,7 +46,7 @@ Source code, release blockers and bug reports: https://github.com/aminostudio/ch
 
 == Installation ==
 
-ChronoArchive 2.1.0-beta2 is for **testing and review only**. Do not use it on an important live website.
+ChronoArchive 2.1.0-beta3 is for **testing and review only**. Do not use it on an important live website.
 
 1. Use an isolated WordPress test installation meeting the requirements above.
 2. Install a development ZIP with a top-level `chronoarchive` directory, or copy its source files into `wp-content/plugins/chronoarchive/`.
@@ -61,7 +61,7 @@ The public `main` branch currently contains the project landing page, **not a do
 
 = Is this plugin ready for production? =
 
-No. Version 2.1.0-beta2 is a development build. Public stable release and WordPress.org review are pending, including the final security and SQL checks.
+No. Version 2.1.0-beta3 is a development build. Public stable release and WordPress.org review are pending, including the final security and SQL checks.
 
 = Does ChronoArchive support old shortcodes? =
 
@@ -84,6 +84,15 @@ Please report vulnerabilities privately through the maintainer's contact informa
 Amino Studio develops and maintains ChronoArchive. The project repository contains its source code, technical documentation and release history.
 
 == Changelog ==
+
+= 2.1.0-beta3 =
+
+* Live shortcode builder and fully redesigned responsive settings dashboard.
+* Six validated global defaults, shortcode preset library and quick-copy controls.
+* Explicit shortcode attributes remain authoritative, with legacy aliases and widgets preserved.
+* Browser-tested Settings API persistence and restored values after reload.
+* Improved asset packaging and a distinct plugin version for safe staging updates.
+* Development-only: final SQL and inherited-vulnerability review are still open.
 
 = 2.1.0-beta2 =
 
@@ -110,6 +119,10 @@ Amino Studio develops and maintains ChronoArchive. The project repository contai
 * This development version was not a public security-certified release.
 
 == Upgrade Notice ==
+
+= 2.1.0-beta3 =
+
+New settings dashboard and shortcode configuration. Back up LAB before updating, verify saved settings, classic widgets, archive links, and the shortcode builder. Development beta only; not a production or WordPress.org release.
 
 = 2.1.0-beta2 =
 
