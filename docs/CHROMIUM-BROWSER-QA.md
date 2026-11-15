@@ -55,3 +55,14 @@ for the real LAB or any production environment.
 
 See [live beta2 QA record](LAB-BETA2-LIVE-QA.md) for which tests have
 actually been performed against Amino #LAB.
+
+
+## CI platform fix
+
+The first workflow execution reached browser installation but
+`playwright@1.56.1` rejected GitHub's new `ubuntu-latest` runner based
+on Ubuntu 26.04 (unsupported Chromium host platform). This was an
+**environment setup failure before executing browser assertions**, not a
+plugin regression. To keep the browser installation reproducible and
+without a moving compatibility target, this WordPress matrix is pinned
+to `ubuntu-24.04`. Recheck the full matrix and browser test after pinning.
