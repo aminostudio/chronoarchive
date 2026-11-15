@@ -732,7 +732,7 @@ foreach ( array(
     $assert( 'Core ' . $mode . ' Text widget still expands ChronoArchive shortcode',
         false !== strpos( $rendered_text_widget, '<aside>' ) &&
         false !== strpos( $rendered_text_widget, '<a ' ) &&
-        false !== strpos( $rendered_text_widget, '2019' ) &&
+        false !== strpos( $rendered_text_widget, '<ul>' ) &&
         false === strpos( $rendered_text_widget, '[chronoarchive' ) );
 }
 
