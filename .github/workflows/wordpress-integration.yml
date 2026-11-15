@@ -247,9 +247,10 @@ jobs:
           # WordPress index.php; no external Apache/Nginx site is accessed.
           "${wpcli[@]}" rewrite structure '/%year%/%monthnum%/%postname%/'
           "${wpcli[@]}" rewrite flush
-          echo 'Browser QA: pretty permalink mode'
+          echo 'Browser QA: pretty permalink mode + live Settings API save'
           CHRONO_BROWSER_PAGE_ID="$page_id" \
             CHRONO_BROWSER_BASE='http://127.0.0.1:8093' \
+            CHRONO_BROWSER_TEST_SAVE='1' \
             node tests/browser-archive-qa.mjs
 
       - name: Benchmark 3,000 synthetic posts on isolated latest WP / PHP 8.4
