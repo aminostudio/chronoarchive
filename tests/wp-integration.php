@@ -861,6 +861,18 @@ if ( ! is_wp_error( $editor_id ) ) {
     $assert( 'Contributor shortcode strips scriptable event handlers',
         false === stripos( $contributor_html, 'onclick=' ) &&
         false === stripos( $contributor_html, 'onerror=' ) );
+    // CVE-2023-0178 requires only contributor access on the original plugin.
+    // Check its published payload with the actual contributor identity and
+    // all historic aliases; no permission-dependent rendering bypass allowed.
+    foreach ( array( 'archives', 'arcpromat', 'chronoarchive' ) as $contributor_alias ) {
+        $contributor_poc = '[' . $contributor_alias . ' tag=\'ul onmouseover="alert(1)"\' limit=\'2\']';
+        $contributor_output = do_shortcode( $contributor_poc );
+        $assert( 'Contributor role cannot inject shortcode tag attribute (' . $contributor_alias . ')',
+            0 === strpos( trim( $contributor_output ), '<ul>' ) &&
+            false !== strpos( $contributor_output, '<a ' ) &&
+            false === stripos( $contributor_output, 'onmouseover=' ) &&
+            false === stripos( $contributor_output, 'alert(1)' ) );
+    }
     ob_start();
     $plugin_under_test->options_page();
     $contrib_admin_html = ob_get_clean();
