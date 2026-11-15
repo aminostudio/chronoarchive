@@ -834,12 +834,12 @@ class WP_Plugin_ChronoArchive {
 			'postbypost' => __( 'Post by post', 'chronoarchive' ),
 		);
 		$examples = array(
-			array( __( 'Yearly overview', 'chronoarchive' ), '[chronoarchive type="yearly"]' ),
+			array( __( 'Yearly overview', 'chronoarchive' ), '[chronoarchive type="yearly" format="html"]' ),
 			array( __( 'Monthly dropdown', 'chronoarchive' ), '[chronoarchive type="monthly" format="option"]' ),
-			array( __( 'Weekly archives', 'chronoarchive' ), '[chronoarchive type="weekly" limit="12"]' ),
-			array( __( 'By decade', 'chronoarchive' ), '[chronoarchive type="decade" order="ASC"]' ),
-			array( __( 'Alphabetical posts', 'chronoarchive' ), '[chronoarchive type="alpha" limit="20"]' ),
-			array( __( 'Show post counts', 'chronoarchive' ), '[chronoarchive type="yearly" show_post_count="1"]' ),
+			array( __( 'Weekly archives', 'chronoarchive' ), '[chronoarchive type="weekly" format="html" limit="12"]' ),
+			array( __( 'By decade', 'chronoarchive' ), '[chronoarchive type="decade" format="html" order="ASC"]' ),
+			array( __( 'Alphabetical posts', 'chronoarchive' ), '[chronoarchive type="alpha" format="html" alpha_order="ASC" limit="20"]' ),
+			array( __( 'Show post counts', 'chronoarchive' ), '[chronoarchive type="yearly" format="html" show_post_count="1"]' ),
 		);
 		$post_types = get_post_types( array( 'public' => true ), 'objects' );
 		?>
