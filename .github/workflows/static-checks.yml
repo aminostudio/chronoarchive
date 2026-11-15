@@ -64,27 +64,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # A stable version must be buildable, not rejected as if it were
-          # still beta3. A prerelease must NOT pass any stable-only gate.
-          if grep -Eq '^Version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*
- chronoarchive.php; then
+          # Stable releases must be buildable. Prerelease metadata must
+          # never be accepted by either of the stable-only commands.
+          if grep -Eq '^Version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$' chronoarchive.php; then
             python3 scripts/check-release-metadata.py --release
             python3 scripts/build-wporg-zip.py --release --output "$RUNNER_TEMP/chronoarchive-a.zip"
             python3 scripts/build-wporg-zip.py --release --output "$RUNNER_TEMP/chronoarchive-b.zip"
-            echo "PASS: stable version meets metadata and package release gates"
+            echo "PASS: stable metadata and package checks"
           else
             if python3 scripts/check-release-metadata.py --release; then
-              echo "::error::A prerelease incorrectly passed the stable metadata gate."
+              echo "::error::Prerelease unexpectedly passed the stable metadata gate"
               exit 1
             fi
             if python3 scripts/build-wporg-zip.py --release --output "$RUNNER_TEMP/forbidden-stable.zip"; then
-              echo "::error::A prerelease incorrectly passed the stable ZIP gate."
+              echo "::error::Prerelease unexpectedly passed the stable ZIP gate"
               exit 1
             fi
             test ! -e "$RUNNER_TEMP/forbidden-stable.zip"
             python3 scripts/build-lab-zip.py --output "$RUNNER_TEMP/chronoarchive-a.zip"
             python3 scripts/build-lab-zip.py --output "$RUNNER_TEMP/chronoarchive-b.zip"
-            echo "PASS: prerelease packaging works but stable gates remain closed"
+            echo "PASS: prerelease stable gates blocked, LAB package valid"
           fi
           cmp "$RUNNER_TEMP/chronoarchive-a.zip" "$RUNNER_TEMP/chronoarchive-b.zip"
           unzip -t "$RUNNER_TEMP/chronoarchive-a.zip"
