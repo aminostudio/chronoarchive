@@ -95,7 +95,9 @@ class WP_Plugin_ChronoArchive {
 		add_shortcode('chronoarchive', array($this, 'shortcode'));
 
 		// Add filters.
-		add_filter( 'widget_text', 'do_shortcode' );
+		// Core WP_Widget_Text and block widgets already execute shortcodes.
+		// Avoid registering a second global widget_text do_shortcode() hook,
+		// which can reorder rendering and cause duplicate processing.
 		add_filter( 'query_vars', array($this, 'ChronoArchive_query_vars') );
 		add_filter( 'pre_get_posts', array($this, 'ChronoArchive_decade_filter') );
 		add_filter( 'get_the_archive_title', array($this, 'ChronoArchive_decade_title') );
