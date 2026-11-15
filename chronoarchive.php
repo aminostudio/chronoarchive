@@ -818,48 +818,244 @@ class WP_Plugin_ChronoArchive {
 	 * Options page callback.
 	 */
 	function options_page() {
-		// The settings page must never render for unprivileged users, even when
-		// invoked directly outside its capability-gated admin_menu registration.
+		// Only users authorized to manage settings may access this dashboard.
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
 		$this->_set_options();
 		$options = $this->options;
+		$types = array(
+			'yearly' => __( 'Yearly', 'chronoarchive' ),
+			'monthly' => __( 'Monthly', 'chronoarchive' ),
+			'weekly' => __( 'Weekly', 'chronoarchive' ),
+			'daily' => __( 'Daily', 'chronoarchive' ),
+			'decade' => __( 'Decade', 'chronoarchive' ),
+			'alpha' => __( 'Alphabetical', 'chronoarchive' ),
+			'postbypost' => __( 'Post by post', 'chronoarchive' ),
+		);
+		$examples = array(
+			array( __( 'Yearly overview', 'chronoarchive' ), '[chronoarchive type="yearly"]' ),
+			array( __( 'Monthly dropdown', 'chronoarchive' ), '[chronoarchive type="monthly" format="option"]' ),
+			array( __( 'Weekly archives', 'chronoarchive' ), '[chronoarchive type="weekly" limit="12"]' ),
+			array( __( 'By decade', 'chronoarchive' ), '[chronoarchive type="decade" order="ASC"]' ),
+			array( __( 'Alphabetical posts', 'chronoarchive' ), '[chronoarchive type="alpha" limit="20"]' ),
+			array( __( 'Show post counts', 'chronoarchive' ), '[chronoarchive type="yearly" show_post_count="1"]' ),
+		);
+		$post_types = get_post_types( array( 'public' => true ), 'objects' );
 		?>
-		<div class="wrap">
-			<h1><?php echo esc_html( $this->plugin_name ); ?></h1>
-			<p><?php esc_html_e( 'Display chronological archives with shortcodes or a classic widget.', 'chronoarchive' ); ?></p>
-			<form method="post" action="options.php">
-				<?php settings_fields( $this->domain ); ?>
-				<table class="form-table" role="presentation">
-					<tr>
-						<th scope="row">
-							<label for="chronoarchive-custom-css"><?php esc_html_e( 'Custom CSS', 'chronoarchive' ); ?></label>
-						</th>
-						<td>
-							<textarea id="chronoarchive-custom-css"
-								name="<?php echo esc_attr( $this->options_name ); ?>[custom_css]"
-								rows="7" cols="70" class="large-text code" <?php disabled( ! current_user_can( 'edit_css' ), true ); ?>><?php echo esc_textarea( $options['custom_css'] ); ?></textarea>
-							<p class="description">
-								<?php esc_html_e( 'Only users with the WordPress edit_css capability may change custom CSS. Previously saved multisite CSS requires approval by an authorized administrator.', 'chronoarchive' ); ?>
-							</p>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row"><?php esc_html_e( 'Custom post type archive links', 'chronoarchive' ); ?></th>
-						<td>
-							<label for="chronoarchive-cpt-archive">
-								<input type="checkbox" id="chronoarchive-cpt-archive"
-									name="<?php echo esc_attr( $this->options_name ); ?>[use_cpt_archive]"
-									value="1" <?php checked( $options['use_cpt_archive'], '1' ); ?> />
-								<?php esc_html_e( 'Prefer registered custom post type archive URLs when available', 'chronoarchive' ); ?>
-							</label>
-							<p class="description"><?php esc_html_e( 'Post types without a public archive base fall back to the normal WordPress archive URL with a post_type parameter.', 'chronoarchive' ); ?></p>
-						</td>
-					</tr>
-				</table>
-				<?php submit_button(); ?>
-			</form>
+		<div class="wrap chronoarchive-admin">
+			<header class="ca-hero">
+				<p class="ca-eyebrow"><?php esc_html_e( 'AMINO STUDIO / WORDPRESS', 'chronoarchive' ); ?></p>
+				<h1><?php esc_html_e( 'ChronoArchive', 'chronoarchive' ); ?></h1>
+				<p><?php esc_html_e( 'Build chronological archives, tune your defaults and copy ready-to-use shortcodes. Everything in one place.', 'chronoarchive' ); ?></p>
+				<div class="ca-meta">
+					<span><?php esc_html_e( '7 archive types', 'chronoarchive' ); ?></span>
+					<span><?php esc_html_e( 'Shortcodes & classic widget', 'chronoarchive' ); ?></span>
+					<span><?php esc_html_e( 'WordPress native', 'chronoarchive' ); ?></span>
+				</div>
+			</header>
+
+			<div class="ca-layout">
+				<section class="ca-panel" aria-labelledby="chronoarchive-settings-heading">
+					<div class="ca-panel-head">
+						<h2 id="chronoarchive-settings-heading"><?php esc_html_e( 'Global defaults', 'chronoarchive' ); ?></h2>
+						<p><?php esc_html_e( 'These values apply to shortcodes when an attribute is not specified. Existing shortcodes with explicit attributes keep their own choices.', 'chronoarchive' ); ?></p>
+					</div>
+					<form method="post" action="options.php">
+						<?php settings_fields( $this->domain ); ?>
+						<div class="ca-form-grid">
+							<div class="ca-field">
+								<label for="chronoarchive-default-type"><?php esc_html_e( 'Archive type', 'chronoarchive' ); ?></label>
+								<select id="chronoarchive-default-type" name="<?php echo esc_attr( $this->options_name ); ?>[default_type]">
+									<?php foreach ( $types as $value => $label ) : ?>
+										<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $options['default_type'], $value ); ?>><?php echo esc_html( $label ); ?></option>
+									<?php endforeach; ?>
+								</select>
+							</div>
+							<div class="ca-field">
+								<label for="chronoarchive-default-format"><?php esc_html_e( 'Display style', 'chronoarchive' ); ?></label>
+								<select id="chronoarchive-default-format" name="<?php echo esc_attr( $this->options_name ); ?>[default_format]">
+									<option value="html" <?php selected( $options['default_format'], 'html' ); ?>><?php esc_html_e( 'Archive links', 'chronoarchive' ); ?></option>
+									<option value="option" <?php selected( $options['default_format'], 'option' ); ?>><?php esc_html_e( 'Dropdown selector', 'chronoarchive' ); ?></option>
+								</select>
+							</div>
+							<div class="ca-field">
+								<label for="chronoarchive-default-order"><?php esc_html_e( 'Sort direction', 'chronoarchive' ); ?></label>
+								<select id="chronoarchive-default-order" name="<?php echo esc_attr( $this->options_name ); ?>[default_order]">
+									<option value="DESC" <?php selected( $options['default_order'], 'DESC' ); ?>><?php esc_html_e( 'Newest first', 'chronoarchive' ); ?></option>
+									<option value="ASC" <?php selected( $options['default_order'], 'ASC' ); ?>><?php esc_html_e( 'Oldest first', 'chronoarchive' ); ?></option>
+								</select>
+							</div>
+							<div class="ca-field">
+								<label for="chronoarchive-default-limit"><?php esc_html_e( 'Maximum archive entries', 'chronoarchive' ); ?></label>
+								<input id="chronoarchive-default-limit" type="number" min="0" max="500" step="1"
+									name="<?php echo esc_attr( $this->options_name ); ?>[default_limit]"
+									value="<?php echo esc_attr( $options['default_limit'] ); ?>" placeholder="0" />
+								<p class="ca-help"><?php esc_html_e( '0 or blank means unlimited. Maximum: 500.', 'chronoarchive' ); ?></p>
+							</div>
+							<div class="ca-field ca-span-2">
+								<label for="chronoarchive-default-select-text"><?php esc_html_e( 'Dropdown placeholder', 'chronoarchive' ); ?></label>
+								<input id="chronoarchive-default-select-text" type="text" maxlength="100"
+									name="<?php echo esc_attr( $this->options_name ); ?>[default_select_text]"
+									value="<?php echo esc_attr( $options['default_select_text'] ); ?>"
+									placeholder="<?php esc_attr_e( 'Select an archive…', 'chronoarchive' ); ?>" />
+								<p class="ca-help"><?php esc_html_e( 'Optional. Leave blank to use the translated WordPress label for each archive type.', 'chronoarchive' ); ?></p>
+							</div>
+							<div class="ca-span-2">
+								<label class="ca-toggle" for="chronoarchive-default-count">
+									<input id="chronoarchive-default-count" type="checkbox" value="1"
+										name="<?php echo esc_attr( $this->options_name ); ?>[default_show_post_count]"
+										<?php checked( $options['default_show_post_count'], '1' ); ?> />
+									<span>
+										<strong><?php esc_html_e( 'Show post counts by default', 'chronoarchive' ); ?></strong>
+										<small><?php esc_html_e( 'Displays the number of published posts in each archive.', 'chronoarchive' ); ?></small>
+									</span>
+								</label>
+							</div>
+						</div>
+						<div class="ca-rule"></div>
+						<h3><?php esc_html_e( 'Custom post type URLs', 'chronoarchive' ); ?></h3>
+						<label class="ca-toggle" for="chronoarchive-cpt-archive">
+							<input type="checkbox" id="chronoarchive-cpt-archive"
+								name="<?php echo esc_attr( $this->options_name ); ?>[use_cpt_archive]"
+								value="1" <?php checked( $options['use_cpt_archive'], '1' ); ?> />
+							<span>
+								<strong><?php esc_html_e( 'Prefer registered custom post type archive URLs', 'chronoarchive' ); ?></strong>
+								<small><?php esc_html_e( 'Falls back to standard WordPress archive URLs when a public archive base is unavailable.', 'chronoarchive' ); ?></small>
+							</span>
+						</label>
+						<div class="ca-rule"></div>
+						<details class="ca-advanced">
+							<summary><?php esc_html_e( 'Advanced appearance · Custom CSS', 'chronoarchive' ); ?></summary>
+							<div class="ca-advanced-inner">
+								<div class="ca-field">
+									<label for="chronoarchive-custom-css"><?php esc_html_e( 'Custom CSS', 'chronoarchive' ); ?></label>
+									<textarea id="chronoarchive-custom-css"
+										name="<?php echo esc_attr( $this->options_name ); ?>[custom_css]"
+										rows="7" cols="70" <?php disabled( ! current_user_can( 'edit_css' ), true ); ?>><?php echo esc_textarea( $options['custom_css'] ); ?></textarea>
+									<p class="ca-help"><?php esc_html_e( 'Only administrators with the edit_css capability may change this field. Previously saved multisite CSS requires approval by an authorized administrator.', 'chronoarchive' ); ?></p>
+								</div>
+							</div>
+						</details>
+						<div class="ca-actions">
+							<?php submit_button( __( 'Save settings', 'chronoarchive' ), 'primary', 'submit', false ); ?>
+							<span class="ca-help"><?php esc_html_e( 'Applies to new shortcode output; no changes to post content.', 'chronoarchive' ); ?></span>
+						</div>
+					</form>
+				</section>
+
+				<div class="ca-stack">
+					<section class="ca-panel" aria-labelledby="chronoarchive-builder-heading">
+						<div class="ca-panel-head">
+							<h2 id="chronoarchive-builder-heading"><?php esc_html_e( 'Shortcode builder', 'chronoarchive' ); ?></h2>
+							<p><?php esc_html_e( 'Choose your options and copy the result into a Shortcode block, page or post. Changes here do not save global settings.', 'chronoarchive' ); ?></p>
+						</div>
+						<div id="chronoarchive-builder" class="ca-builder-grid">
+							<div class="ca-field">
+								<label for="chronoarchive-build-type"><?php esc_html_e( 'Archive type', 'chronoarchive' ); ?></label>
+								<select id="chronoarchive-build-type" data-chrono-field="type">
+									<?php foreach ( $types as $value => $label ) : ?>
+										<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $options['default_type'], $value ); ?>><?php echo esc_html( $label ); ?></option>
+									<?php endforeach; ?>
+								</select>
+							</div>
+							<div class="ca-field">
+								<label for="chronoarchive-build-format"><?php esc_html_e( 'Display', 'chronoarchive' ); ?></label>
+								<select id="chronoarchive-build-format" data-chrono-field="format">
+									<option value="html" <?php selected( $options['default_format'], 'html' ); ?>><?php esc_html_e( 'Links', 'chronoarchive' ); ?></option>
+									<option value="option" <?php selected( $options['default_format'], 'option' ); ?>><?php esc_html_e( 'Dropdown', 'chronoarchive' ); ?></option>
+								</select>
+							</div>
+							<div class="ca-field">
+								<label for="chronoarchive-build-order"><?php esc_html_e( 'Sort direction', 'chronoarchive' ); ?></label>
+								<select id="chronoarchive-build-order" data-chrono-field="order">
+									<option value="DESC" <?php selected( $options['default_order'], 'DESC' ); ?>><?php esc_html_e( 'Descending', 'chronoarchive' ); ?></option>
+									<option value="ASC" <?php selected( $options['default_order'], 'ASC' ); ?>><?php esc_html_e( 'Ascending', 'chronoarchive' ); ?></option>
+								</select>
+							</div>
+							<div class="ca-field">
+								<label for="chronoarchive-build-limit"><?php esc_html_e( 'Maximum entries', 'chronoarchive' ); ?></label>
+								<input id="chronoarchive-build-limit" type="number" min="0" max="500" step="1" data-chrono-field="limit"
+									value="<?php echo esc_attr( $options['default_limit'] ); ?>" placeholder="0" />
+							</div>
+							<div class="ca-field ca-span-2">
+								<label for="chronoarchive-build-post-type"><?php esc_html_e( 'Post type', 'chronoarchive' ); ?></label>
+								<select id="chronoarchive-build-post-type" data-chrono-field="post_type">
+									<?php foreach ( $post_types as $post_type ) : ?>
+										<?php if ( is_post_type_viewable( $post_type ) ) : ?>
+											<option value="<?php echo esc_attr( $post_type->name ); ?>" <?php selected( $post_type->name, 'post' ); ?>><?php echo esc_html( $post_type->label ); ?></option>
+										<?php endif; ?>
+									<?php endforeach; ?>
+								</select>
+							</div>
+							<div id="chronoarchive-builder-placeholder-group" class="ca-field ca-span-2"
+								<?php if ( 'option' !== $options['default_format'] ) : ?>hidden<?php endif; ?>>
+								<label for="chronoarchive-build-select-text"><?php esc_html_e( 'Dropdown placeholder', 'chronoarchive' ); ?></label>
+								<input id="chronoarchive-build-select-text" type="text" maxlength="100" data-chrono-field="select_text"
+									value="<?php echo esc_attr( $options['default_select_text'] ); ?>" />
+							</div>
+							<div class="ca-span-2">
+								<label class="ca-toggle" for="chronoarchive-build-count">
+									<input id="chronoarchive-build-count" type="checkbox" data-chrono-field="count"
+										<?php checked( $options['default_show_post_count'], '1' ); ?> />
+									<span><?php esc_html_e( 'Include post counts', 'chronoarchive' ); ?></span>
+								</label>
+							</div>
+						</div>
+						<div class="ca-output">
+							<span class="ca-output-label"><?php esc_html_e( 'Your shortcode', 'chronoarchive' ); ?></span>
+							<code id="chronoarchive-generated" tabindex="0">[chronoarchive type="yearly"]</code>
+							<div class="ca-output-bar">
+								<span class="ca-help"><?php esc_html_e( 'Explicit options override global defaults.', 'chronoarchive' ); ?></span>
+								<button type="button" class="button button-primary ca-copy-button"
+									data-chrono-copy="chronoarchive-generated"
+									data-chrono-copied="<?php esc_attr_e( 'Shortcode copied', 'chronoarchive' ); ?>"
+									data-chrono-copy-failed="<?php esc_attr_e( 'Select the shortcode and copy manually', 'chronoarchive' ); ?>"><?php esc_html_e( 'Copy shortcode', 'chronoarchive' ); ?></button>
+							</div>
+						</div>
+						<p id="chronoarchive-copy-status" class="ca-copy-status" role="status" aria-live="polite"></p>
+					</section>
+					<section class="ca-panel" aria-labelledby="chronoarchive-examples-heading">
+						<div class="ca-panel-head">
+							<h2 id="chronoarchive-examples-heading"><?php esc_html_e( 'Ready-made shortcodes', 'chronoarchive' ); ?></h2>
+							<p><?php esc_html_e( 'Quick examples for common archive layouts.', 'chronoarchive' ); ?></p>
+						</div>
+						<div class="ca-preset-list">
+							<?php foreach ( $examples as $index => $example ) : ?>
+								<div class="ca-preset">
+									<div>
+										<span class="ca-preset-name"><?php echo esc_html( $example[0] ); ?></span>
+										<code id="chronoarchive-example-<?php echo esc_attr( $index ); ?>" tabindex="0"><?php echo esc_html( $example[1] ); ?></code>
+									</div>
+									<button type="button" class="button button-secondary"
+										data-chrono-copy="chronoarchive-example-<?php echo esc_attr( $index ); ?>"
+										data-chrono-copied="<?php esc_attr_e( 'Example copied', 'chronoarchive' ); ?>"
+										data-chrono-copy-failed="<?php esc_attr_e( 'Select the shortcode and copy manually', 'chronoarchive' ); ?>"><?php esc_html_e( 'Copy', 'chronoarchive' ); ?></button>
+								</div>
+							<?php endforeach; ?>
+						</div>
+						<div class="ca-reference">
+							<p><?php esc_html_e( 'Use the Shortcode block in the WordPress editor. The legacy aliases [archives] and [arcpromat] also remain supported.', 'chronoarchive' ); ?></p>
+							<details>
+								<summary><?php esc_html_e( 'All supported attributes', 'chronoarchive' ); ?></summary>
+								<dl>
+									<dt><code>type</code></dt><dd><?php esc_html_e( 'yearly, monthly, weekly, daily, decade, alpha, postbypost', 'chronoarchive' ); ?></dd>
+									<dt><code>format</code></dt><dd><?php esc_html_e( 'html, option, link, custom', 'chronoarchive' ); ?></dd>
+									<dt><code>order</code></dt><dd><?php esc_html_e( 'ASC or DESC', 'chronoarchive' ); ?></dd>
+									<dt><code>limit</code></dt><dd><?php esc_html_e( 'Maximum results; 0 for unlimited', 'chronoarchive' ); ?></dd>
+									<dt><code>show_post_count</code></dt><dd><?php esc_html_e( '1 to show counts, 0 to hide', 'chronoarchive' ); ?></dd>
+									<dt><code>post_type</code></dt><dd><?php esc_html_e( 'Slug of a public post type', 'chronoarchive' ); ?></dd>
+									<dt><code>select_text</code></dt><dd><?php esc_html_e( 'Placeholder shown for option dropdowns', 'chronoarchive' ); ?></dd>
+									<dt><code>tag</code></dt><dd><?php esc_html_e( 'ul, ol, div, nav, section or span', 'chronoarchive' ); ?></dd>
+									<dt><code>before / after</code></dt><dd><?php esc_html_e( 'Safe HTML around each archive link', 'chronoarchive' ); ?></dd>
+									<dt><code>alpha_order / post_order</code></dt><dd><?php esc_html_e( 'Sort direction for alphabetical or post-by-post archives', 'chronoarchive' ); ?></dd>
+									<dt><code>use_cpt_archive</code></dt><dd><?php esc_html_e( '1 to prefer custom post type archive URLs', 'chronoarchive' ); ?></dd>
+								</dl>
+							</details>
+						</div>
+					</section>
+				</div>
+			</div>
 		</div>
 		<?php
 	}
