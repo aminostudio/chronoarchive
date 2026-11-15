@@ -1,4 +1,4 @@
-name: LAB beta2 reproducible ZIP
+name: LAB beta3 reproducible ZIP
 
 on:
   pull_request:
@@ -22,22 +22,22 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/build-lab-zip.py \
-            --output dist/chronoarchive-2.1.0-beta2-LAB.zip
+            --output dist/chronoarchive-2.1.0-beta3-LAB.zip
           python3 scripts/build-lab-zip.py \
-            --output dist/repeat/chronoarchive-2.1.0-beta2-LAB.zip
-          cmp dist/chronoarchive-2.1.0-beta2-LAB.zip \
-            dist/repeat/chronoarchive-2.1.0-beta2-LAB.zip
-          unzip -t dist/chronoarchive-2.1.0-beta2-LAB.zip
-          sha256sum dist/chronoarchive-2.1.0-beta2-LAB.zip
+            --output dist/repeat/chronoarchive-2.1.0-beta3-LAB.zip
+          cmp dist/chronoarchive-2.1.0-beta3-LAB.zip \
+            dist/repeat/chronoarchive-2.1.0-beta3-LAB.zip
+          unzip -t dist/chronoarchive-2.1.0-beta3-LAB.zip
+          sha256sum dist/chronoarchive-2.1.0-beta3-LAB.zip
           php -l chronoarchive.php
       - name: Verify future WordPress.org lowercase package (QA candidate)
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/build-wporg-zip.py --output dist/chronoarchive-2.1.0-beta2-WPORG-QA.zip
-          python3 scripts/build-wporg-zip.py --output dist/repeat/chronoarchive-2.1.0-beta2-WPORG-QA.zip
-          cmp dist/chronoarchive-2.1.0-beta2-WPORG-QA.zip dist/repeat/chronoarchive-2.1.0-beta2-WPORG-QA.zip
-          unzip -t dist/chronoarchive-2.1.0-beta2-WPORG-QA.zip
+          python3 scripts/build-wporg-zip.py --output dist/chronoarchive-2.1.0-beta3-WPORG-QA.zip
+          python3 scripts/build-wporg-zip.py --output dist/repeat/chronoarchive-2.1.0-beta3-WPORG-QA.zip
+          cmp dist/chronoarchive-2.1.0-beta3-WPORG-QA.zip dist/repeat/chronoarchive-2.1.0-beta3-WPORG-QA.zip
+          unzip -t dist/chronoarchive-2.1.0-beta3-WPORG-QA.zip
           # A prerelease MUST fail the real publish gate.
           if python3 scripts/build-wporg-zip.py --release --output dist/forbidden-stable.zip; then
             echo 'FAIL: a beta incorrectly passed the stable package gate'
@@ -48,10 +48,10 @@ jobs:
       - name: Upload private QA workflow artifact (not a release)
         uses: actions/upload-artifact@v4
         with:
-          name: chronoarchive-2.1.0-beta2-QA-NOT-PRODUCTION
+          name: chronoarchive-2.1.0-beta3-QA-NOT-PRODUCTION
           path: |
-            dist/chronoarchive-2.1.0-beta2-LAB.zip
-            dist/chronoarchive-2.1.0-beta2-WPORG-QA.zip
+            dist/chronoarchive-2.1.0-beta3-LAB.zip
+            dist/chronoarchive-2.1.0-beta3-WPORG-QA.zip
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
