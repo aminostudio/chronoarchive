@@ -339,10 +339,10 @@ class WP_Plugin_ChronoArchive {
 
 		if ( false === $results ) {
 			$results = $wpdb->get_results( $query );
-			// Cache successful empty result sets, but never database errors.
-			// A transient SQL failure must not persist until posts:last_changed
-			// changes, which could otherwise hide recovered archives.
-			if ( is_array( $results ) ) {
+			// WordPress can return an empty array even when the SQL itself
+			// failed. Check last_error as well as the result type, or a
+			// temporary DB failure is cached as a legitimate empty archive.
+			if ( is_array( $results ) && '' === $wpdb->last_error ) {
 				wp_cache_set( $key, $results, 'posts' );
 			}
 		}
