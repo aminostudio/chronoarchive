@@ -62,6 +62,8 @@ jobs:
           python3 tests/test-pcp-findings.py
       - name: Prove the future stable packaging gate works on a disposable fixture
         run: python3 tests/test-stable-release-gate.py
+      - name: Reject symbolic-link directories in all plugin ZIPs
+        run: python3 tests/test-package-symlinks.py
       - name: Validate package and release gate for this version
         shell: bash
         run: |
