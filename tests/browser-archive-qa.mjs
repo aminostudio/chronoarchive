@@ -17,16 +17,28 @@ const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 const javascriptErrors = [];
 const offsiteRequests = [];
+const unexpectedDialogs = [];
 const dropdownResponses = [];
 page.on('pageerror', (error) => javascriptErrors.push(error.message));
+// A broken javascript: check must fail rather than hang behind an alert.
+page.on('dialog', async (dialog) => {
+  unexpectedDialogs.push(dialog.type() + ': ' + dialog.message());
+  await dialog.dismiss();
+});
+// The browser suite only targets the local disposable WordPress instance.
+// Abort and record EVERY external request, not merely a single test hostname.
+await page.route('**/*', async (route) => {
+  const requestedURL = new URL(route.request().url());
+  if (requestedURL.origin !== new URL(base).origin) {
+    offsiteRequests.push(route.request().url());
+    await route.abort();
+    return;
+  }
+  await route.continue();
+});
 page.on('response', (response) => {
   if (response.url().includes('/assets/js/archive-dropdown.js')) {
     dropdownResponses.push({status: response.status(), mime: response.headers()['content-type'] || ''});
-  }
-});
-page.on('request', (request) => {
-  if (request.url().includes('blocked.example.invalid')) {
-    offsiteRequests.push(request.url());
   }
 });
 page.setDefaultTimeout(15000);
@@ -82,7 +94,8 @@ try {
     await page.waitForTimeout(350);
     assert.equal(page.url(), before, 'Unsafe dropdown navigation refused');
   }
-  assert.deepEqual(offsiteRequests, []);
+  assert.deepEqual(offsiteRequests, [], 'No external network requests allowed');
+  assert.deepEqual(unexpectedDialogs, [], 'javascript: must not execute');
   pass('Off-origin and javascript: dropdown destinations refused');
 
   const week = page.locator('a[href*="chrono_week=2019-12-30"]').first();
