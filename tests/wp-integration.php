@@ -215,6 +215,31 @@ $assert( 'Cached empty archive does not repeat its SQL query',
     $cache_after_second === $cache_after_first );
 unregister_post_type( 'ca_empty_cache' );
 
+// A database error must not poison the archive object cache. A failed
+// get_results() returns null, whereas a valid empty result is an array.
+// The invalid SQL below is generated exclusively by a disposable CI PHP
+// callback, never a visitor input, and errors are suppressed for the test.
+wp_cache_flush();
+$malformed_sql = static function () { return 'WHERE ('; };
+add_filter( 'getarchives_where', $malformed_sql, 10, 1 );
+$previous_suppress = $wpdb->suppress_errors( true );
+$failed_archive_queries_before = $wpdb->num_queries;
+$failed_archive_first = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'post_type' => 'post', 'echo' => 0,
+) );
+$failed_archive_queries_after_first = $wpdb->num_queries;
+$failed_archive_second = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'post_type' => 'post', 'echo' => 0,
+) );
+$failed_archive_queries_after_second = $wpdb->num_queries;
+$wpdb->suppress_errors( $previous_suppress );
+remove_filter( 'getarchives_where', $malformed_sql, 10 );
+$assert( 'Failed archive SQL does not expose partial archive content',
+    '' === $failed_archive_first && '' === $failed_archive_second );
+$assert( 'Failed archive SQL is retried rather than negatively cached',
+    $failed_archive_queries_after_first > $failed_archive_queries_before &&
+    $failed_archive_queries_after_second > $failed_archive_queries_after_first );
+
 // Publishing and deleting posts must invalidate an already warmed archive.
 // WordPress clean_post_cache() updates the posts last_changed token.
 wp_cache_flush();
