@@ -285,8 +285,10 @@ try {
       page.waitForNavigation({ waitUntil: 'load' }),
       page.locator('form[action="options.php"] #submit').click(),
     ]);
-    assert.equal(new URL(page.url()).searchParams.get('settings-updated'), 'true',
-      'WordPress confirms the authenticated Settings API POST');
+    const saveUrl = page.url();
+    const saveMessage = (await page.locator('body').innerText()).slice(0, 750);
+    assert.equal(new URL(saveUrl).searchParams.get('settings-updated'), 'true',
+      'WordPress confirms the authenticated Settings API POST: URL=' + saveUrl + '; page=' + saveMessage);
     assert.equal(await page.locator('#chronoarchive-default-type').inputValue(), 'monthly');
     assert.equal(await page.locator('#chronoarchive-default-format').inputValue(), 'option');
     assert.equal(await page.locator('#chronoarchive-default-order').inputValue(), 'ASC');
