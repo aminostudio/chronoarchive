@@ -842,12 +842,79 @@ update_option( 'WP_ChronoArchive_options', array(
     'custom_css' => '</textarea><script>alert(1)</script>',
     'use_cpt_archive' => '1',
 ) );
+// Global settings must apply to omitted attributes on all three shortcode
+// aliases while each explicit shortcode attribute remains authoritative.
+$validated_defaults = $plugin_under_test->sanitize_settings( array(
+    'custom_css' => '',
+    'default_type' => 'monthly',
+    'default_format' => 'option',
+    'default_order' => 'ASC',
+    'default_limit' => '3',
+    'default_show_post_count' => '1',
+    'default_select_text' => 'Browse months',
+) );
+$assert( 'Admin default choices are validated and persisted',
+    'monthly' === $validated_defaults['default_type'] &&
+    'option' === $validated_defaults['default_format'] &&
+    'ASC' === $validated_defaults['default_order'] &&
+    '3' === $validated_defaults['default_limit'] &&
+    '1' === $validated_defaults['default_show_post_count'] &&
+    'Browse months' === $validated_defaults['default_select_text'] );
+update_option( 'WP_ChronoArchive_options', $validated_defaults );
+$plugin_under_test->_set_options();
+foreach ( array( 'archives', 'arcpromat', 'chronoarchive' ) as $shortcode_alias ) {
+    $default_output = do_shortcode( '[' . $shortcode_alias . ']' );
+    $assert( 'Global dropdown defaults apply to ' . $shortcode_alias,
+        false !== strpos( $default_output, '<select' ) &&
+        false !== strpos( $default_output, '>Browse months</option>' ) &&
+        3 === substr_count( $default_output, '<option value=' ) - 1 );
+}
+$override_output = do_shortcode( '[chronoarchive type="yearly" format="html" order="DESC" show_post_count="0" limit="2"]' );
+$assert( 'Explicit shortcode attributes override global defaults',
+    false === strpos( $override_output, '<select' ) &&
+    2 === substr_count( $override_output, '<li>' ) &&
+    false !== strpos( $override_output, '2026' ) &&
+    false === strpos( $override_output, '&nbsp;(' ) );
+$bad_defaults = $plugin_under_test->sanitize_settings( array(
+    'default_type' => 'script',
+    'default_format' => 'iframe',
+    'default_order' => 'DROP TABLE',
+    'default_limit' => '1 UNION SELECT',
+    'default_show_post_count' => '',
+    'default_select_text' => '<svg onload=alert(1)>',
+) );
+$assert( 'Malicious shortcode defaults fail closed',
+    'yearly' === $bad_defaults['default_type'] &&
+    'html' === $bad_defaults['default_format'] &&
+    'DESC' === $bad_defaults['default_order'] &&
+    '' === $bad_defaults['default_limit'] &&
+    '' === $bad_defaults['default_show_post_count'] &&
+    false === stripos( $bad_defaults['default_select_text'], '<svg' ) );
+delete_option( 'WP_ChronoArchive_options' );
+$plugin_under_test->_set_options();
+
 $old_user = get_current_user_id();
 wp_set_current_user( 1 );
 ob_start();
 $plugin_under_test->options_page();
 $admin_html = ob_get_clean();
 $assert( 'Admin settings screen renders', false !== strpos( $admin_html, 'chronoarchive-custom-css' ) );
+$assert( 'Admin dashboard includes generator and shortcode examples',
+    false !== strpos( $admin_html, 'chronoarchive-builder' ) &&
+    false !== strpos( $admin_html, 'chronoarchive-generated' ) &&
+    false !== strpos( $admin_html, '[chronoarchive type=&quot;monthly&quot; format=&quot;option&quot;]' ) &&
+    6 === substr_count( $admin_html, 'class="ca-preset"' ) );
+$assert( 'Global defaults form and CSS controls are accessible',
+    false !== strpos( $admin_html, '[default_type]' ) &&
+    false !== strpos( $admin_html, '[default_format]' ) &&
+    false !== strpos( $admin_html, '[default_order]' ) &&
+    false !== strpos( $admin_html, '[default_limit]' ) &&
+    false !== strpos( $admin_html, '[default_show_post_count]' ) &&
+    false !== strpos( $admin_html, '[default_select_text]' ) &&
+    false !== strpos( $admin_html, '<details class="ca-advanced">' ) &&
+    1 === substr_count( $admin_html, '<form ' ) );
+
+
 $assert( 'Settings screen has no redundant fork or licensing footer',
     false === stripos( $admin_html, 'Fork of Annual Archive' ) &&
     false === stripos( $admin_html, 'distributed under the GPL' ) &&
