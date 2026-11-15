@@ -82,8 +82,17 @@ try {
 
   // Synthetic options are inserted by the test, not source-site data.
   for (const target of [
+    // Absolute external URL and scheme-relative URL.
     'https://blocked.example.invalid/unsafe',
+    '//blocked.example.invalid/unsafe',
+    // A familiar-looking localhost userinfo prefix must not fool origin checks.
+    'http://127.0.0.1:8093@blocked.example.invalid/unsafe',
+    // A different port on the same host is also a different origin.
+    'http://127.0.0.1:8094/unsafe',
+    // Non-HTTP protocols must never navigate or execute JavaScript.
     'javascript:alert(document.domain)',
+    'java\\tscript:alert(document.domain)',
+    'data:text/html,<script>alert(document.domain)</script>',
   ]) {
     const before = page.url();
     await dropdowns.first().evaluate((select, value) => {
