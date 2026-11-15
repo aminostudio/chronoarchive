@@ -47,6 +47,12 @@
 			'show_post_count="' + count + '"',
 			'post_type="' + postType + '"'
 		];
+		if (type === 'alpha') {
+			args.push('alpha_order="' + order + '"');
+		}
+		if (type === 'postbypost') {
+			args.push('post_order="' + order + '"');
+		}
 		const placeholderGroup = root.querySelector('#chronoarchive-builder-placeholder-group');
 		if (placeholderGroup) {
 			placeholderGroup.hidden = format !== 'option';
