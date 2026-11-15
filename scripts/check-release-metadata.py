@@ -123,6 +123,50 @@ def main() -> int:
             "RELEASE GATE: use a verified release tag, not 'trunk'"
         )
 
+    if args.release:
+        # A stable zip with correct version numbers can still expose stale
+        # "development beta / do not use" copy to reviewers and users.
+        # Inspect ONLY current public sections, not historic beta changelog.
+        current_readme = readme.split("== Changelog ==", 1)[0]
+        stale_release_phrases = (
+            r"development beta",
+            r"development build",
+            r"testing and review only",
+            r"not yet recommended for production",
+            r"do not use it on an important live website",
+            r"not approved by WordPress\\.org",
+            r"stable release[^\\n]*pending",
+        )
+        for phrase in stale_release_phrases:
+            if re.search(phrase, current_readme, flags=re.IGNORECASE):
+                errors.append(
+                    "RELEASE GATE: current readme still contains beta-only "
+                    "or pre-submission language"
+                )
+                break
+
+        changelog = readme.split("== Changelog ==", 1)[-1].split(
+            "== Upgrade Notice ==", 1
+        )[0]
+        if version and f"= {version} =" not in changelog:
+            errors.append("RELEASE GATE: current stable changelog entry missing")
+
+        upgrade = readme.split("== Upgrade Notice ==", 1)
+        if len(upgrade) != 2 or (version and f"= {version} =" not in upgrade[1]):
+            errors.append("RELEASE GATE: current stable upgrade notice missing")
+        elif version:
+            current_notice = upgrade[1].split(f"= {version} =", 1)[1].split(
+                "\\n= ", 1
+            )[0]
+            if re.search(
+                r"\\b(beta|development|not.*production|review.*pending)\\b",
+                current_notice,
+                flags=re.IGNORECASE,
+            ):
+                errors.append(
+                    "RELEASE GATE: current upgrade notice still advertises beta"
+                )
+
     if errors:
         heading = "RELEASE GATE BLOCKED" if args.release else "METADATA SCHEMA FAILED"
         print(heading + ":")
