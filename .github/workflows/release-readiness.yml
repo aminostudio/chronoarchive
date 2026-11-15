@@ -24,3 +24,27 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check WordPress.org metadata
         run: python3 scripts/check-release-metadata.py --release
+      - name: Build and verify final distribution twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build-wporg-zip.py --release --output "$RUNNER_TEMP/chronoarchive-a.zip"
+          python3 scripts/build-wporg-zip.py --release --output "$RUNNER_TEMP/chronoarchive-b.zip"
+          cmp "$RUNNER_TEMP/chronoarchive-a.zip" "$RUNNER_TEMP/chronoarchive-b.zip"
+          unzip -t "$RUNNER_TEMP/chronoarchive-a.zip"
+          # WordPress.org's new plugin submission limit is 10 MB.
+          test "$(stat -c %s "$RUNNER_TEMP/chronoarchive-a.zip")" -lt 10485760
+          echo "Distribution checksum:"
+          sha256sum "$RUNNER_TEMP/chronoarchive-a.zip"
+          echo "Distribution size:"
+          stat -c '%s bytes' "$RUNNER_TEMP/chronoarchive-a.zip"
+      - name: Require matching version tag on tag-triggered releases
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^Version:[[:space:]]*//p' chronoarchive.php | head -1)
+          test "$GITHUB_REF_NAME" = "v$version" || {
+            echo "::error::Git tag $GITHUB_REF_NAME differs from plugin version v$version"
+            exit 1
+          }
