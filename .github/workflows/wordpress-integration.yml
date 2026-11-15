@@ -222,6 +222,17 @@ jobs:
             fi
             sleep 0.5
           done
+          echo 'Browser QA: plain permalink mode'
+          CHRONO_BROWSER_PAGE_ID="$page_id" \
+            CHRONO_BROWSER_BASE='http://127.0.0.1:8093' \
+            node tests/browser-archive-qa.mjs
+
+          # Repeat identical real-browser navigation under WordPress pretty
+          # permalinks. The local PHP router passes non-file requests to
+          # WordPress index.php; no external Apache/Nginx site is accessed.
+          "${wpcli[@]}" rewrite structure '/%year%/%monthnum%/%postname%/'
+          "${wpcli[@]}" rewrite flush
+          echo 'Browser QA: pretty permalink mode'
           CHRONO_BROWSER_PAGE_ID="$page_id" \
             CHRONO_BROWSER_BASE='http://127.0.0.1:8093' \
             node tests/browser-archive-qa.mjs
