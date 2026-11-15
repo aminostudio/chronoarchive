@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-There is currently **no supported stable release**. `2.1.0-beta1` is an experimental LAB baseline, not security certified.
+There is currently **no supported stable release**. `2.1.0-beta3` is an isolated LAB development build and is **not security certified or recommended for production**.
 
 ## Reporting vulnerabilities
 
@@ -12,7 +12,7 @@ Include the affected version, WordPress/PHP environment, minimal reproduction st
 
 ## Upstream security history
 
-The predecessor Annual Archive has documented XSS issues, including `CVE-2023-0178` and `CVE-2024-33598`. Their presence is a reason to inspect the fork's affected code paths. This file **does not assert** the fork is currently vulnerable or fully patched.
+Annual Archive has documented XSS advisories `CVE-2023-0178`, `CVE-2023-49847` and `CVE-2024-33598`. The exact published shortcode vector for CVE-2023-0178 has been tested on the fork; the other two advisories still require disclosure-specific review. See [`docs/UPSTREAM-CVE-MAPPING.md`](docs/UPSTREAM-CVE-MAPPING.md). This file does **not** claim that the fork is fully certified or free of vulnerabilities.
 
 ## Required release reviews
 
