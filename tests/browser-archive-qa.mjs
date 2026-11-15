@@ -155,7 +155,7 @@ try {
   // not merely render labels or inherit another select's event handling.
   for (const scenario of [
     { index: 1, optionText: /December 2019/i, fixture: 'CA HTTP Boundary Dec', name: '[archives] monthly dropdown' },
-    { index: 2, optionText: /\\b2019\\b/, fixture: 'CA HTTP Boundary Dec', name: '[arcpromat] yearly dropdown' },
+    { index: 2, optionText: /\b2019\b/, fixture: 'CA HTTP Boundary Dec', name: '[arcpromat] yearly dropdown' },
   ]) {
     await openQa();
     const aliasSelect = page.locator('select.chronoarchive-select').nth(scenario.index);
