@@ -134,8 +134,8 @@ def main() -> int:
             r"testing and review only",
             r"not yet recommended for production",
             r"do not use it on an important live website",
-            r"not approved by WordPress\\.org",
-            r"stable release[^\\n]*pending",
+            r"not approved by WordPress\.org",
+            r"stable release[^\n]*pending",
         )
         for phrase in stale_release_phrases:
             if re.search(phrase, current_readme, flags=re.IGNORECASE):
@@ -156,10 +156,10 @@ def main() -> int:
             errors.append("RELEASE GATE: current stable upgrade notice missing")
         elif version:
             current_notice = upgrade[1].split(f"= {version} =", 1)[1].split(
-                "\\n= ", 1
+                "\n= ", 1
             )[0]
             if re.search(
-                r"\\b(beta|development|not.*production|review.*pending)\\b",
+                r"\b(beta|development|not.*production|review.*pending)\b",
                 current_notice,
                 flags=re.IGNORECASE,
             ):
