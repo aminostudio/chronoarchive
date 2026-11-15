@@ -216,6 +216,61 @@ try {
     pass(kind + ': HTTP 404');
   }
 
+  // Real logged-in WordPress UI smoke test: the shortcode builder must be
+  // functional, not a static illustration. This admin account only exists
+  // on the disposable localhost CI installation (never on Amino LAB).
+  await page.goto(new URL('/wp-login.php', base).href, { waitUntil: 'load' });
+  await page.locator('#user_login').fill('ci_admin');
+  await page.locator('#user_pass').fill('ci-only-password-unsafe-to-reuse');
+  await Promise.all([
+    page.waitForURL((url) => url.pathname.includes('/wp-admin/'), { waitUntil: 'load' }),
+    page.locator('#wp-submit').click(),
+  ]);
+  const adminResponse = await page.goto(
+    new URL('/wp-admin/options-general.php?page=ChronoArchive-options', base).href,
+    { waitUntil: 'load' }
+  );
+  assert.equal(adminResponse?.status(), 200, 'ChronoArchive settings admin loads');
+  assert.equal(await page.locator('#chronoarchive-builder').count(), 1);
+  assert.equal(await page.locator('#chronoarchive-default-type').count(), 1);
+  assert.equal(await page.locator('#chronoarchive-default-format').count(), 1);
+  assert.equal(await page.locator('#chronoarchive-custom-css').count(), 1);
+  assert.equal(await page.locator('.ca-preset').count(), 6);
+  assert.equal(await page.locator('script[src*="/assets/js/admin-settings.js"]').count(), 1);
+  assert.equal(await page.locator('link[href*="/assets/css/admin-settings.css"]').count(), 1);
+  assert.equal(await page.getByText('Fork of Annual Archive', { exact: false }).count(), 0,
+    'No visible fork/footer text in the refreshed settings page');
+  pass('Native settings admin renders custom layout, presets and scoped assets');
+
+  await page.locator('[data-chrono-field="type"]').selectOption('monthly');
+  await page.locator('[data-chrono-field="format"]').selectOption('option');
+  await page.locator('[data-chrono-field="order"]').selectOption('ASC');
+  await page.locator('[data-chrono-field="limit"]').fill('4');
+  await page.locator('[data-chrono-field="count"]').check();
+  await page.locator('[data-chrono-field="select_text"]').fill('Browse by month');
+  const shortcode = await page.locator('#chronoarchive-generated').innerText();
+  for (const segment of [
+    'type="monthly"', 'format="option"', 'order="ASC"', 'limit="4"',
+    'show_post_count="1"', 'post_type="post"', 'select_text="Browse by month"',
+  ]) {
+    assert.ok(shortcode.includes(segment), 'Generated shortcode must include ' + segment);
+  }
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], {
+    origin: new URL(base).origin,
+  });
+  await page.locator('[data-chrono-copy="chronoarchive-generated"]').click();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  assert.equal(copied, shortcode, 'Real copy button transfers the generated shortcode');
+  assert.ok((await page.locator('#chronoarchive-copy-status').innerText()).includes('Shortcode copied'));
+  await page.locator('[data-chrono-field="type"]').selectOption('alpha');
+  await page.locator('[data-chrono-field="format"]').selectOption('html');
+  assert.ok((await page.locator('#chronoarchive-generated').innerText()).includes('alpha_order="ASC"'),
+    'Alphabetical sort direction is explicit');
+  await page.locator('[data-chrono-field="type"]').selectOption('postbypost');
+  assert.ok((await page.locator('#chronoarchive-generated').innerText()).includes('post_order="ASC"'),
+    'Post-by-post sort direction is explicit');
+  pass('Shortcode builder updates live and copies into system clipboard');
+
   assert.deepEqual(javascriptErrors, [], 'No uncaught browser JavaScript errors');
   pass('Chromium runtime generated no uncaught errors');
   console.log('BROWSER RESULT: Chromium archive QA passed');
