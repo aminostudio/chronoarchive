@@ -710,6 +710,32 @@ $assert( 'Custom CSS enqueued through WP Styles', is_array( $inline_css ) && cou
 $assert( 'Enqueued CSS cannot contain raw HTML tag', is_array( $inline_css ) &&
     false === strpos( implode( "\n", $inline_css ), '<' ) );
 
+// WordPress 4.9+ already implements shortcode handling for both visual
+// and legacy Text widgets via widget_text_content. Registering the old
+// widget_text/do_shortcode global filter duplicates that core behavior and
+// can alter shortcode/paragraph rendering order across unrelated widgets.
+$assert( 'Plugin does not re-register obsolete global Text-widget shortcode filter',
+    false === has_filter( 'widget_text', 'do_shortcode' ) &&
+    false !== has_filter( 'widget_text_content', 'do_shortcode' ) );
+$text_widget = new WP_Widget_Text();
+foreach ( array(
+    'legacy' => array( 'text' => '[chronoarchive type="yearly" format="html" limit="2"]', 'filter' => false, 'visual' => false ),
+    'visual' => array( 'text' => '[chronoarchive type="yearly" format="html" limit="2"]', 'filter' => true, 'visual' => true ),
+) as $mode => $instance ) {
+    ob_start();
+    $text_widget->widget(
+        array( 'before_widget' => '<aside>', 'after_widget' => '</aside>',
+            'before_title' => '<h3>', 'after_title' => '</h3>' ),
+        $instance
+    );
+    $rendered_text_widget = ob_get_clean();
+    $assert( 'Core ' . $mode . ' Text widget still expands ChronoArchive shortcode',
+        false !== strpos( $rendered_text_widget, '<aside>' ) &&
+        false !== strpos( $rendered_text_widget, '<a ' ) &&
+        false !== strpos( $rendered_text_widget, '2019' ) &&
+        false === strpos( $rendered_text_widget, '[chronoarchive' ) );
+}
+
 $widget = new ChronoArchive_Widget();
 $bad_instance = array( 'title' => array( 'bad' ), 'before' => array( 'bad' ),
     'type' => array( 'bad' ), 'format' => array( 'bad' ), 'post_type' => array( 'bad' ) );
