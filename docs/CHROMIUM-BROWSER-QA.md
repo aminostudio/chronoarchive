@@ -80,3 +80,26 @@ the test now explicitly waits for the page's `load` state and records the
 actual destination URL plus response body excerpt if an archive fixture
 still is absent. This distinguishes browser-navigation timing from a
 possible real URL or rendering defect.
+
+
+## Root cause: WordPress plain-permalink URLs use `m`
+
+Chromium exposed a real functionality regression. The generated weekly
+link was `?m=2019&chrono_week=2019-12-30`. WordPress's
+`get_year_link(2019)` uses the legacy `m=2019` query variable with
+plain permalinks, whereas our original PHP test passed `year=2019`.
+The pre-get-posts handler cleared `year` but not `m`, so January 2020
+was excluded from the displayed week despite appearing in the canonical
+date range. Decade archives generated through `get_year_link()` had the
+same risk.
+
+The fix clears both `year` and `m` when constructing a validated weekly
+or decade `date_query`. The week/decade bounds remain unchanged and still
+fail closed for malformed dates. New disposable WordPress assertions
+exercise both exact plain URL formats, and the guest HTTP test now tests
+`?m=2019&chrono_week=...` and `?m=2010&decade=2010` alongside the
+existing `?year=...` cases. Chromium continues clicking generated links
+rather than hard-coding their destinations.
+
+This patch is on the development branch only; the installed LAB beta2
+has **not** been altered.

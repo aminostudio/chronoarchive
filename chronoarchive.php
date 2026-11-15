@@ -136,7 +136,11 @@ class WP_Plugin_ChronoArchive {
 				$query->set( 'post__in', array( 0 ) );
 				return;
 			}
-			$query->set( 'year', '' ); // Weekly ranges can span two calendar years.
+			// WordPress plain-permalink get_year_link() uses ?m=YYYY,
+			// while pretty permalinks use ?year=YYYY. Clear BOTH, or the
+			// legacy year restriction can hide January in an ISO week.
+			$query->set( 'year', '' );
+			$query->set( 'm', '' );
 			$query->set( 'date_query', array(
 				array(
 					'after'     => $week,
@@ -158,7 +162,10 @@ class WP_Plugin_ChronoArchive {
 			if ( '' !== $decade ) {
 				$start = $decade . '-01-01';
 				$end   = ( $decade + 9 ) . '-12-31';
+				// get_year_link() can produce ?m=YYYY with plain permalinks.
+				// The decade's date_query, not a single year, owns the range.
 				$query->set( 'year', '' );
+				$query->set( 'm', '' );
 				$query->set( 'date_query', array(
 					array( 'after' => $start, 'before' => $end, 'inclusive' => true ),
 				) );

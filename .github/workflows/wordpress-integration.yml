@@ -161,6 +161,29 @@ jobs:
           test "$malformed_decade_code" = 404
           echo 'PASS: invalid decade gives 404'
 
+          # The archive's actual plain-permalink href comes from WordPress
+          # get_year_link(), which uses ?m=YYYY rather than ?year=YYYY.
+          # Verify it does not incorrectly truncate cross-year/decade results.
+          plain_week_url='http://127.0.0.1:8093/?m=2019&chrono_week=2019-12-30'
+          plain_week_code=$(curl --silent --show-error --max-time 20 \
+            --output /tmp/chrono-plain-week.html --write-out '%{http_code}' "$plain_week_url")
+          test "$plain_week_code" = 200
+          grep -Fq 'CA HTTP Boundary Dec' /tmp/chrono-plain-week.html
+          grep -Fq 'CA HTTP Boundary Jan' /tmp/chrono-plain-week.html
+          echo 'PASS: actual ?m=2019 weekly href includes both years'
+
+          plain_decade_url='http://127.0.0.1:8093/?m=2010&decade=2010'
+          plain_decade_code=$(curl --silent --show-error --max-time 20 \
+            --output /tmp/chrono-plain-decade.html --write-out '%{http_code}' "$plain_decade_url")
+          test "$plain_decade_code" = 200
+          grep -Fq 'CA HTTP Boundary Dec' /tmp/chrono-plain-decade.html
+          if grep -Fq 'CA HTTP Boundary Jan' /tmp/chrono-plain-decade.html; then
+            echo 'FAIL: ?m=2010 decade exposed January 2020'
+            exit 1
+          fi
+          echo 'PASS: actual ?m=2010 decade href excludes next decade'
+
+
       - name: Browser QA · Chromium against disposable WordPress
         if: matrix.php == '8.4' && matrix.wp == 'latest'
         shell: bash
