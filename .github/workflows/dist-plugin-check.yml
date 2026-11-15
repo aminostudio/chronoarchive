@@ -3,6 +3,9 @@ name: Official Plugin Check on WordPress.org QA ZIP
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
+  push:
+    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -17,7 +20,13 @@ jobs:
     name: WordPress Plugin Check · packaged lowercase candidate
     # Scan exact ZIP for the consolidated review even while it is a draft.
     # Diagnostic in draft; mandatory when marked ready for review.
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'integration/') || github.event.pull_request.base.ref == 'develop/import-lab-beta1'
+    # All ready PRs, main and version tags must scan the EXACT distribution.
+    # Draft QA runs only for the consolidated integration branch family.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false ||
+      startsWith(github.head_ref, 'integration/') ||
+      github.event.pull_request.base.ref == 'develop/import-lab-beta1'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,9 +34,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/build-wporg-zip.py --output dist/chronoarchive-2.1.0-beta3-WPORG-QA.zip
+          # A reviewed PR or tag MUST contain stable metadata; drafts may
+          # produce a prerelease ZIP for diagnostic scanning only.
+          args=()
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]] || [[ '${{ github.event.pull_request.draft }}' == 'false' ]]; then
+            args+=(--release)
+          fi
+          python3 scripts/check-release-metadata.py
+          python3 scripts/build-wporg-zip.py "${args[@]}" --output dist/chronoarchive-exact-candidate.zip
           mkdir -p dist/plugin-check-input
-          unzip -q dist/chronoarchive-2.1.0-beta3-WPORG-QA.zip -d dist/plugin-check-input
+          unzip -q dist/chronoarchive-exact-candidate.zip -d dist/plugin-check-input
           test -f dist/plugin-check-input/chronoarchive/chronoarchive.php
           test -f dist/plugin-check-input/chronoarchive/readme.txt
       - name: Run official Plugin Check on extracted distribution, no ignores
