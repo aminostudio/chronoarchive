@@ -151,6 +151,31 @@ try {
   assert.ok((await page.locator('body').innerText()).includes('CA HTTP Boundary Dec'));
   pass('Real change event loads same-origin yearly archive');
 
+  // Both legacy shortcode aliases must navigate using their own dropdowns,
+  // not merely render labels or inherit another select's event handling.
+  for (const scenario of [
+    { index: 1, optionText: /December 2019/i, fixture: 'CA HTTP Boundary Dec', name: '[archives] monthly dropdown' },
+    { index: 2, optionText: /\\b2019\\b/, fixture: 'CA HTTP Boundary Dec', name: '[arcpromat] yearly dropdown' },
+  ]) {
+    await openQa();
+    const aliasSelect = page.locator('select.chronoarchive-select').nth(scenario.index);
+    const aliasOption = await aliasSelect.evaluate((node, regexSource) => {
+      const pattern = new RegExp(regexSource.source, regexSource.flags);
+      const match = [...node.options].find((option) => pattern.test(option.textContent));
+      return match?.value ?? null;
+    }, { source: scenario.optionText.source, flags: scenario.optionText.flags });
+    assert.ok(aliasOption, scenario.name + ' has a matching option');
+    const destination = new URL(aliasOption, qaURL);
+    assert.equal(destination.origin, new URL(qaURL).origin, scenario.name + ' remains same-origin');
+    await Promise.all([
+      page.waitForURL((url) => url.href === destination.href, { waitUntil: 'load' }),
+      aliasSelect.selectOption(aliasOption),
+    ]);
+    assert.ok((await page.locator('body').innerText()).includes(scenario.fixture),
+      scenario.name + ' resolves the expected published post');
+    pass(scenario.name + ' navigates in real Chromium');
+  }
+
   for (const [url, kind] of [
     ['/?year=2024&chrono_week=2024-02-31', 'malformed ISO week'],
     ['/?year=2010&decade=2015', 'non-boundary decade'],
