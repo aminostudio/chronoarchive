@@ -848,6 +848,10 @@ ob_start();
 $plugin_under_test->options_page();
 $admin_html = ob_get_clean();
 $assert( 'Admin settings screen renders', false !== strpos( $admin_html, 'chronoarchive-custom-css' ) );
+$assert( 'Settings screen has no redundant fork or licensing footer',
+    false === stripos( $admin_html, 'Fork of Annual Archive' ) &&
+    false === stripos( $admin_html, 'distributed under the GPL' ) &&
+    false === strpos( $admin_html, 'ChronoArchive 2.1.0-beta2.' ) );
 $assert( 'Admin textarea closes only once', 1 === substr_count( $admin_html, '</textarea>' ) );
 $assert( 'Admin saved CSS cannot inject script', false === stripos( $admin_html, '<script>' ) );
 $assert( 'Admin settings form includes WordPress nonce', false !== strpos( $admin_html, '_wpnonce' ) );
