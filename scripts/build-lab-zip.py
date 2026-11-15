@@ -15,7 +15,7 @@ import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "2.1.0-beta2"
+EXPECTED_VERSION = "2.1.0-beta3"
 # LAB plugin basename is ChronoArchive/chronoarchive.php; Linux paths are case-sensitive.
 # This LAB-only ZIP must preserve that installed directory, not create a copy.
 # Future WordPress.org packages require separately reviewed lowercase slug paths.
