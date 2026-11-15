@@ -60,20 +60,31 @@ jobs:
         run: |
           python3 -m py_compile scripts/verify-pcp-findings.py tests/test-pcp-findings.py
           python3 tests/test-pcp-findings.py
-      - name: Check installable package against version metadata (every PR)
+      - name: Validate package and release gate for this version
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/build-lab-zip.py --output "$RUNNER_TEMP/chronoarchive-candidate-a.zip"
-          python3 scripts/build-lab-zip.py --output "$RUNNER_TEMP/chronoarchive-candidate-b.zip"
-          cmp "$RUNNER_TEMP/chronoarchive-candidate-a.zip" "$RUNNER_TEMP/chronoarchive-candidate-b.zip"
-          unzip -t "$RUNNER_TEMP/chronoarchive-candidate-a.zip"
-      - name: Ensure this beta cannot pass the stable-release gate
-        shell: bash
-        run: |
-          set -euo pipefail
-          if python3 scripts/check-release-metadata.py --release; then
-            echo "::error::A development beta incorrectly passed the stable-release gate."
-            exit 1
+          # A stable version must be buildable, not rejected as if it were
+          # still beta3. A prerelease must NOT pass any stable-only gate.
+          if grep -Eq '^Version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*
+ chronoarchive.php; then
+            python3 scripts/check-release-metadata.py --release
+            python3 scripts/build-wporg-zip.py --release --output "$RUNNER_TEMP/chronoarchive-a.zip"
+            python3 scripts/build-wporg-zip.py --release --output "$RUNNER_TEMP/chronoarchive-b.zip"
+            echo "PASS: stable version meets metadata and package release gates"
+          else
+            if python3 scripts/check-release-metadata.py --release; then
+              echo "::error::A prerelease incorrectly passed the stable metadata gate."
+              exit 1
+            fi
+            if python3 scripts/build-wporg-zip.py --release --output "$RUNNER_TEMP/forbidden-stable.zip"; then
+              echo "::error::A prerelease incorrectly passed the stable ZIP gate."
+              exit 1
+            fi
+            test ! -e "$RUNNER_TEMP/forbidden-stable.zip"
+            python3 scripts/build-lab-zip.py --output "$RUNNER_TEMP/chronoarchive-a.zip"
+            python3 scripts/build-lab-zip.py --output "$RUNNER_TEMP/chronoarchive-b.zip"
+            echo "PASS: prerelease packaging works but stable gates remain closed"
           fi
-          echo "PASS: prerelease version correctly blocks stable publishing."
+          cmp "$RUNNER_TEMP/chronoarchive-a.zip" "$RUNNER_TEMP/chronoarchive-b.zip"
+          unzip -t "$RUNNER_TEMP/chronoarchive-a.zip"
