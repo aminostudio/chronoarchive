@@ -60,6 +60,8 @@ jobs:
         run: |
           python3 -m py_compile scripts/verify-pcp-findings.py tests/test-pcp-findings.py
           python3 tests/test-pcp-findings.py
+      - name: Prove the future stable packaging gate works on a disposable fixture
+        run: python3 tests/test-stable-release-gate.py
       - name: Validate package and release gate for this version
         shell: bash
         run: |
