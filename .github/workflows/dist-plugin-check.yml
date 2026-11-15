@@ -38,3 +38,11 @@ jobs:
           slug: chronoarchive
           # Do not suppress SQL findings, plugin_repo checks or warnings.
           # QA candidate is a beta; this is NOT a WordPress.org submission.
+      # The official scanner writes real JSON even when its action exits 1.
+      # Drafts are advisory only for the *known* SQL baseline: unknown errors
+      # and warnings cause this additional step to fail the development CI.
+      # On non-draft PRs the official scanner above remains fully blocking.
+      - name: Fail draft CI if new Plugin Check violations appear
+        if: ${{ always() }}
+        shell: bash
+        run: python3 scripts/verify-pcp-findings.py "$RUNNER_TEMP/plugin-check-results.txt"
