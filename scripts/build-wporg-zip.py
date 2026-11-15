@@ -56,8 +56,13 @@ def build(output: Path, release: bool) -> tuple[str, str, int]:
         source = ROOT / name
         if not source.is_file() or source.is_symlink():
             raise ValueError(f"Missing or unsafe release file: {name}")
-        if source.resolve().parent != source.parent.resolve():
-            raise ValueError(f"Unsafe path: {name}")
+        # Reject symlinked ancestor folders as well as symlinked files.
+        # The previous resolved-parent equality accepted a linked assets/
+        # directory and could import external bytes into the release ZIP.
+        if any(part.is_symlink() for part in (source.parent, *source.parents)):
+            raise ValueError(f"Symlinked package parent: {name}")
+        if not source.resolve().is_relative_to(ROOT.resolve()):
+            raise ValueError(f"Unsafe path escaping repository: {name}")
         payload = source.read_bytes()
         if not payload:
             raise ValueError(f"Empty release file: {name}")
