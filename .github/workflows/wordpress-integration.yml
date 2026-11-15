@@ -211,6 +211,9 @@ jobs:
           [archives tag='ul onmouseover="alert(1)"' limit='2']
           [arcpromat tag='ul onmouseover="alert(1)"' limit='2']
           [chronoarchive tag='ul onmouseover="alert(1)"' limit='2']
+          [archives tag='ul onmouseover=alert(1)' limit='2']
+          [arcpromat tag='ul onmouseover=alert(1)' limit='2']
+          [chronoarchive tag='ul onmouseover=alert(1)' limit='2']
           </div>
           EOF
           page_id=$("${wpcli[@]}" post create --post_type=page \
