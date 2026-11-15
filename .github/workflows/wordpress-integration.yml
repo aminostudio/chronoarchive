@@ -218,6 +218,12 @@ jobs:
             --post_content="$(cat /tmp/chrono-browser-qa-content.txt)" --porcelain)
           test -n "$page_id"
           echo "Disposable browser QA page ID: $page_id"
+          # Store unsanitized historic administrator CSS directly in this
+          # disposable test database to exercise the *output* boundary.
+          # Never inject this payload on the protected Amino LAB.
+          "${wpcli[@]}" option update WP_ChronoArchive_options \
+            '{"custom_css":".chrono-css-check{color:navy}</style><script id=\"ca-admin-css-xss\">alert(1)</script>","custom_css_approved":"1","use_cpt_archive":""}' \
+            --format=json
           php -S 127.0.0.1:8093 -t /tmp/chrono-wp "$PWD/tests/ci-browser-router.php" \
             >/tmp/chrono-browser-server.log 2>&1 &
           server_pid=$!
