@@ -918,7 +918,7 @@ $assert( 'Global defaults form and CSS controls are accessible',
 $assert( 'Settings screen has no redundant fork or licensing footer',
     false === stripos( $admin_html, 'Fork of Annual Archive' ) &&
     false === stripos( $admin_html, 'distributed under the GPL' ) &&
-    false === strpos( $admin_html, 'ChronoArchive 2.1.0-beta2.' ) );
+    0 === preg_match( '/ChronoArchive [0-9]+\.[0-9]+\.[0-9]+-beta[0-9]+\./', $admin_html ) );
 $assert( 'Admin textarea closes only once', 1 === substr_count( $admin_html, '</textarea>' ) );
 $assert( 'Admin saved CSS cannot inject script', false === stripos( $admin_html, '<script>' ) );
 $assert( 'Admin settings form includes WordPress nonce', false !== strpos( $admin_html, '_wpnonce' ) );
