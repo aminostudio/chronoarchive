@@ -8,13 +8,13 @@ Requires PHP: 7.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Browse WordPress posts by year, month, week, day or decade, with shortcodes and a classic widget. Independent fork of Annual Archive.
+Browse WordPress posts by year, month, week, day or decade using shortcodes or a classic widget.
 
 == Description ==
 
 **Development beta: not yet recommended for production sites.**
 
-ChronoArchive creates chronological archive lists for WordPress posts and supported public custom post types. It is an independently maintained, GPL-licensed fork of *Annual Archive* by Twinpictures and its contributors.
+ChronoArchive creates chronological archive lists for WordPress posts and supported public custom post types. Developed and maintained by Amino Studio.
 
 Supported archive modes:
 
@@ -36,7 +36,7 @@ Examples:
 
 `[chronoarchive type="monthly" format="option" select_text="Choose a month"]`
 
-**Security and release status:** The imported Annual Archive code has undergone extensive hardening in development branches. Final SQL, localization and inherited-vulnerability reviews remain open. This beta has not been approved by WordPress.org and should be tested on an isolated WordPress site only.
+**Security and release status:** Development security hardening and compatibility tests are ongoing. Final SQL and inherited-vulnerability reviews remain open. This beta has not been approved by WordPress.org and should be tested on an isolated WordPress site only.
 
 Source code, release blockers and bug reports: https://github.com/aminostudio/chronoarchive
 
@@ -75,9 +75,9 @@ Supported public custom post types can be selected with `post_type`. Test their 
 
 Please report vulnerabilities privately through the maintainer's contact information at https://aminostudio.fr/ instead of posting exploit details in public issues. See SECURITY.md in the GitHub development branch.
 
-= Who originally created Annual Archive? =
+= Who maintains ChronoArchive? =
 
-ChronoArchive is a fork of Annual Archive, originally by Twinpictures. Historical upstream authorship and licensing notices are preserved. This independent fork is not endorsed by the original authors.
+Amino Studio develops and maintains ChronoArchive. The project repository contains its source code, technical documentation and release history.
 
 == Changelog ==
 
@@ -103,10 +103,6 @@ ChronoArchive is a fork of Annual Archive, originally by Twinpictures. Historica
 * Laboratory fixes to input validation, historical shortcode handling and decade counts.
 * Preliminary legacy widget improvements and output escaping.
 * This development version was not a public security-certified release.
-
-= Earlier history =
-
-ChronoArchive derives from Annual Archive. The original changelog and attribution are retained in the development repository's historical documentation.
 
 == Upgrade Notice ==
 
