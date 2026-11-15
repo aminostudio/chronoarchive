@@ -73,11 +73,14 @@ try {
   'Dropdown asset must actually load as JavaScript, not HTML from a router');
   pass('Three labelled, unique dropdowns and one script present');
 
+  // WordPress redirects /?page_id=ID to the canonical pretty URL once
+  // rewrites are enabled. A no-op selection must preserve that actual URL.
+  const canonicalQaURL = page.url();
   const yearSelect = dropdowns.first();
   await yearSelect.focus();
   assert.equal(await yearSelect.evaluate((node) => document.activeElement === node), true);
   await yearSelect.press('Enter'); // Empty placeholder is inert.
-  assert.equal(page.url(), qaURL, 'Empty dropdown selection must not navigate');
+  assert.equal(page.url(), canonicalQaURL, 'Empty dropdown selection must not navigate');
   pass('Dropdown accepts keyboard focus and empty selection is inert');
 
   // Synthetic options are inserted by the test, not source-site data.
