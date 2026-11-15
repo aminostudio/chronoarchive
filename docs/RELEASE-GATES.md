@@ -84,3 +84,14 @@ reproducible ZIP checks now enforce consistency of the shared constant.
 **Deployment status:** this follow-on fix is a stacked development PR.
 The LAB remains on the previously installed `2.1.0-beta2` ZIP until
 a separately packaged and accepted update is deployed.
+
+
+### Follow-on browser regression coverage (development PR)
+
+The isolated latest WordPress/PHP 8.4 CI matrix now creates a dedicated
+shortcode QA page and opens it with headless Chromium/Playwright. It tests
+real week/decade link clicks, same-origin dropdown navigation, inaccessible
+URLs, multi-select accessibility and actual HTTP 404 responses. This is
+separate from the protected LAB's **pending authenticated browser QA** and
+does not constitute WordPress.org security approval. See
+[Chromium browser QA design](CHROMIUM-BROWSER-QA.md).
