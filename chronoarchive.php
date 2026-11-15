@@ -67,6 +67,12 @@ class WP_Plugin_ChronoArchive {
 		// values are not trusted implicitly when upgrading this plugin.
 		'custom_css_approved' => '',
 		'use_cpt_archive' => '',
+		'default_type' => 'yearly',
+		'default_format' => 'html',
+		'default_order' => 'DESC',
+		'default_limit' => '',
+		'default_show_post_count' => '',
+		'default_select_text' => '',
 	);
 
 	/**
@@ -291,10 +297,26 @@ class WP_Plugin_ChronoArchive {
 				'1' === $previous['custom_css_approved'] ? '1' : '';
 		}
 
+		// These defaults affect only shortcode attributes left unspecified.
+		// Always allowlist stored choices: option values may predate this UI.
+		$type = isset( $input['default_type'] ) && is_string( $input['default_type'] ) ? sanitize_key( $input['default_type'] ) : '';
+		$format = isset( $input['default_format'] ) && is_string( $input['default_format'] ) ? sanitize_key( $input['default_format'] ) : '';
+		$order = isset( $input['default_order'] ) && is_string( $input['default_order'] ) ? strtoupper( $input['default_order'] ) : '';
+		$limit_raw = isset( $input['default_limit'] ) && is_scalar( $input['default_limit'] ) ? (string) $input['default_limit'] : '';
+		$limit = preg_match( '/^[0-9]{1,4}$/D', $limit_raw ) ? min( 500, absint( $limit_raw ) ) : 0;
+		$select_text = isset( $input['default_select_text'] ) && is_string( $input['default_select_text'] )
+			? substr( sanitize_text_field( wp_unslash( $input['default_select_text'] ) ), 0, 100 ) : '';
+
 		return array(
 			'custom_css' => $css,
 			'custom_css_approved' => $approved,
 			'use_cpt_archive' => ! empty( $input['use_cpt_archive'] ) ? '1' : '',
+			'default_type' => in_array( $type, array( 'yearly', 'monthly', 'weekly', 'daily', 'decade', 'alpha', 'postbypost' ), true ) ? $type : 'yearly',
+			'default_format' => in_array( $format, array( 'html', 'option' ), true ) ? $format : 'html',
+			'default_order' => in_array( $order, array( 'ASC', 'DESC' ), true ) ? $order : 'DESC',
+			'default_limit' => $limit > 0 ? (string) $limit : '',
+			'default_show_post_count' => ! empty( $input['default_show_post_count'] ) ? '1' : '',
+			'default_select_text' => $select_text,
 		);
 	}
 
@@ -305,6 +327,10 @@ class WP_Plugin_ChronoArchive {
 	 */
 	function archive_admin_js_scripts( $hook ) {
 		global $pagenow;
+		if ( $hook === 'settings_page_' . $this->plugin_options_slug ) {
+			wp_enqueue_style( 'chronoarchive-admin', plugins_url( 'assets/css/admin-settings.css', __FILE__ ), array(), $this->version );
+			wp_enqueue_script( 'chronoarchive-admin', plugins_url( 'assets/js/admin-settings.js', __FILE__ ), array(), $this->version, true );
+		}
 		if ( $hook == 'widgets.php' && $pagenow != 'customize.php' ) {
 			$plugin_url = plugins_url() . '/' . dirname( plugin_basename(__FILE__) );
 			wp_register_script( 'archive-admin-script', $plugin_url . '/js/widget_form.js', array( 'jquery' ), '0.2', true );
@@ -673,18 +699,18 @@ class WP_Plugin_ChronoArchive {
 	 */
 	function shortcode( $atts, $content = null ) {
 		$defaults = array(
-			'type'            => 'yearly',
-			'limit'           => '',
-			'format'          => 'html', // html, option, link
+			'type'            => $this->options['default_type'],
+			'limit'           => $this->options['default_limit'],
+			'format'          => $this->options['default_format'], // html, option, link
 			'before'          => '',
 			'after'           => '',
-			'show_post_count' => '0',
+			'show_post_count' => $this->options['default_show_post_count'],
 			'showcount'       => '0',
 			'tag'             => 'ul',
-			'order'           => 'DESC',
+			'order'           => $this->options['default_order'],
 			'alpha_order'     => 'ASC',
 			'post_order'      => 'DESC',
-			'select_text'     => '',
+			'select_text'     => $this->options['default_select_text'],
 			'post_type'       => 'post',
 			'use_cpt_archive' => $this->options['use_cpt_archive']
 		);
@@ -861,6 +887,17 @@ class WP_Plugin_ChronoArchive {
 			is_scalar( $saved_options['use_cpt_archive'] )
 			? '1'
 			: '';
+		$type = isset( $saved_options['default_type'] ) && is_string( $saved_options['default_type'] ) ? sanitize_key( $saved_options['default_type'] ) : '';
+		$format = isset( $saved_options['default_format'] ) && is_string( $saved_options['default_format'] ) ? sanitize_key( $saved_options['default_format'] ) : '';
+		$order = isset( $saved_options['default_order'] ) && is_string( $saved_options['default_order'] ) ? strtoupper( $saved_options['default_order'] ) : '';
+		$limit = isset( $saved_options['default_limit'] ) && is_scalar( $saved_options['default_limit'] ) ? (string) $saved_options['default_limit'] : '';
+		$this->options['default_type'] = in_array( $type, array( 'yearly', 'monthly', 'weekly', 'daily', 'decade', 'alpha', 'postbypost' ), true ) ? $type : 'yearly';
+		$this->options['default_format'] = in_array( $format, array( 'html', 'option' ), true ) ? $format : 'html';
+		$this->options['default_order'] = in_array( $order, array( 'ASC', 'DESC' ), true ) ? $order : 'DESC';
+		$this->options['default_limit'] = preg_match( '/^[0-9]{1,4}$/D', $limit ) && absint( $limit ) > 0 ? (string) min( 500, absint( $limit ) ) : '';
+		$this->options['default_show_post_count'] = ! empty( $saved_options['default_show_post_count'] ) && is_scalar( $saved_options['default_show_post_count'] ) ? '1' : '';
+		$this->options['default_select_text'] = isset( $saved_options['default_select_text'] ) && is_string( $saved_options['default_select_text'] )
+			? substr( sanitize_text_field( $saved_options['default_select_text'] ), 0, 100 ) : '';
 	}
 
 } // end class WP_Plugin_ChronoArchive
