@@ -1,8 +1,31 @@
 # ChronoArchive SQL review request
 
 **Status:** Human review required before any stable release or WordPress.org submission.  
-**Candidate:** 2.1.0-beta2, integration branch (LAB still runs 2.1.0-beta1).  
+**Candidate:** 2.1.0-beta2, consolidated integration PR #28. LAB remains on the previously installed 2.1.0-beta2 build, not the newer GitHub working-tree fixes.  
 **Tracking:** [issue #4](https://github.com/aminostudio/chronoarchive/issues/4) and [core-parity PR #20](https://github.com/aminostudio/chronoarchive/pull/20).
+
+## Reviewer decision packet | 15 November 2026
+
+**Single release blocker in source:** `chronoarchive.php`, method `WP_Plugin_ChronoArchive::cached_archive_rows()`, one `$wpdb->get_results( $query )` sink (near line 341). This is the one execution site for five archive aggregation types and the optional historical SQL-hook listing fallback. The official Plugin Check on the **actual lowercase ZIP** reports exactly two errors and one warning:
+
+| Code | Severity | Why it remains |
+| --- | --- | --- |
+| `PluginCheck.Security.DirectDB.UnescapedDBParameter` | ERROR | Static analyzer sees a SQL variable assembled in another method |
+| `WordPress.DB.PreparedSQL.NotPrepared` | ERROR | Static analyzer cannot associate the sink with a published-post-type predicate prepared before the SQL hooks |
+| `WordPress.DB.DirectDatabaseQuery.DirectQuery` | WARNING | Direct SQL aggregates date buckets not returned as counts by ordinary `WP_Query` |
+
+**Public-input boundary, confirmed in real WP/MariaDB tests:** `post_type` is reduced to a viewable registered key and bound with `$wpdb->prepare( ... %s ... )`; date grouping is fixed SQL; ASC/DESC is enum-validated; `limit` is an integer; week start is converted to an integer. Malformed `getarchives_where` and `getarchives_join` return types and NUL bytes fail closed. The tests cover both legitimate hook-provided LIKE patterns and deliberate full WHERE rewrites, plus duplicate JOIN rows and query caching. The [four-way matrix #43734204307](https://github.com/aminostudio/chronoarchive/actions/runs/43734204307) passed 253 assertions per environment. This is **strong evidence about tested paths**, not a proof of safety for every callback registered by third-party PHP.
+
+**Code-level extension boundary:** WordPress core explicitly defines `getarchives_where` and `getarchives_join` as **SQL-fragment** hooks, not value hooks. The installed PHP callback is responsible for parameterizing any visitor-provided values it introduces. Blindly passing a complete JOIN or WHERE fragment to `%s` would quote executable SQL syntax as a string, silently break working extensions, and *not* establish safety. `WP_Query` has replaced direct SQL for normal `alpha` and `postbypost` listings without archive SQL hooks; historical hooks select the legacy fallback.
+
+**Requested WordPress.org review disposition:**
+1. Is the single reviewed SQL sink acceptable with documented core-hook compatibility and narrowly scoped justifications for the two static errors, even though the default post type is correctly prepared **before** the hook?
+2. If not, what is the supported mechanism for preserving `getarchives_where` and `getarchives_join` behavior while satisfying `PreparedSQL.NotPrepared` without adding meaningless dummy `$wpdb->prepare()` calls?
+3. Is the *direct aggregate-query* warning acceptable for grouped year/month/day/week/decade counts, when the matching `WP_Query` high-level API does not offer SQL `GROUP BY` count results?
+
+**Nonnegotiable release gate:** The GitHub draft CI can report its *baseline* as expected, but its green status is not a clean scanner result. Non-draft PRs and final WordPress.org packages remain **strictly blocked** until a reviewer-endorsed resolution, redesign, or a defensible and explicit exception is obtained. No sniff suppression is currently present. A new automated draft guard also rejects *additional* findings, even though it does not absolve the three existing ones.
+
+Reference: [WordPress `wp_get_archives()`](https://developer.wordpress.org/reference/functions/wp_get_archives/), [`getarchives_where` hook](https://developer.wordpress.org/reference/hooks/getarchives_where/), [`getarchives_join` hook](https://developer.wordpress.org/reference/hooks/getarchives_join/), [`wpdb::prepare()`](https://developer.wordpress.org/reference/classes/wpdb/prepare/), [Plugin Check #1333](https://github.com/WordPress/plugin-check/issues/1333).
 
 ## Precise question for a WordPress plugin reviewer
 
