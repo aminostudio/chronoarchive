@@ -21,8 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Class WP_Plugin_ChronoArchive
  *
- * This plugin is a fork of Annual Archive by Twinpictures.
- * It displays various archive lists via shortcode or widget.
+ * Displays chronological archive lists through shortcodes and widgets.
  */
 class WP_Plugin_ChronoArchive {
 
@@ -835,17 +834,6 @@ class WP_Plugin_ChronoArchive {
 				</table>
 				<?php submit_button(); ?>
 			</form>
-			<p class="description">
-				<?php
-				echo esc_html(
-					sprintf(
-						/* translators: %s: plugin version. */
-						__( 'ChronoArchive %s. Fork of Annual Archive by Twinpictures, distributed under the GPL.', 'chronoarchive' ),
-						$this->version
-					)
-				);
-				?>
-			</p>
 		</div>
 		<?php
 	}
