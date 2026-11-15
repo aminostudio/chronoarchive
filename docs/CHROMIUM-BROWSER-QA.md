@@ -66,3 +66,17 @@ on Ubuntu 26.04 (unsupported Chromium host platform). This was an
 plugin regression. To keep the browser installation reproducible and
 without a moving compatibility target, this WordPress matrix is pinned
 to `ubuntu-24.04`. Recheck the full matrix and browser test after pinning.
+
+
+## First real browser run: navigation timing
+
+The first browser execution on Ubuntu 24.04 passed dropdown accessiblity,
+asset presence, focus and blocked external destinations. The cross-year
+week click reached a matching URL, but its immediate post-navigation
+`body.innerText()` assertion lacked the January fixture. The prior
+`curl` HTTP integration test for this same week URL **did** return both
+2019 and 2020 titles. We are not treating that as a passing browser test:
+the test now explicitly waits for the page's `load` state and records the
+actual destination URL plus response body excerpt if an archive fixture
+still is absent. This distinguishes browser-navigation timing from a
+possible real URL or rendering defect.

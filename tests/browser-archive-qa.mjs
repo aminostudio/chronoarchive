@@ -79,21 +79,25 @@ try {
   const week = page.locator('a[href*="chrono_week=2019-12-30"]').first();
   assert.equal(await week.count(), 1, 'Cross-year week link generated');
   await Promise.all([
-    page.waitForURL((url) => url.searchParams.get('chrono_week') === '2019-12-30'),
+    page.waitForURL((url) => url.searchParams.get('chrono_week') === '2019-12-30', { waitUntil: 'load' }),
     week.click(),
   ]);
+  await page.waitForLoadState('load');
   const weekText = await page.locator('body').innerText();
-  assert.ok(weekText.includes('CA HTTP Boundary Dec'), 'Week includes December 2019');
-  assert.ok(weekText.includes('CA HTTP Boundary Jan'), 'Week includes January 2020');
+  assert.ok(weekText.includes('CA HTTP Boundary Dec'),
+    'Week includes December 2019; URL=' + page.url() + ', text=' + weekText.slice(0, 1200));
+  assert.ok(weekText.includes('CA HTTP Boundary Jan'),
+    'Week includes January 2020; URL=' + page.url() + ', text=' + weekText.slice(0, 1200));
   pass('Clicking archive link navigates to both years in one ISO week');
 
   await openQa();
   const decade = page.locator('a[href*="decade=2010"]').first();
   assert.equal(await decade.count(), 1, 'Decade link generated');
   await Promise.all([
-    page.waitForURL((url) => url.searchParams.get('decade') === '2010'),
+    page.waitForURL((url) => url.searchParams.get('decade') === '2010', { waitUntil: 'load' }),
     decade.click(),
   ]);
+  await page.waitForLoadState('load');
   const decadeText = await page.locator('body').innerText();
   assert.ok(decadeText.includes('CA HTTP Boundary Dec'));
   assert.ok(!decadeText.includes('CA HTTP Boundary Jan'), '2020 excluded from 2010 decade');
@@ -109,9 +113,10 @@ try {
   const selectedURL = new URL(selectedValue, qaURL);
   assert.equal(selectedURL.origin, new URL(qaURL).origin);
   await Promise.all([
-    page.waitForURL((url) => url.href === selectedURL.href),
+    page.waitForURL((url) => url.href === selectedURL.href, { waitUntil: 'load' }),
     selectYear.selectOption(selectedValue),
   ]);
+  await page.waitForLoadState('load');
   assert.ok((await page.locator('body').innerText()).includes('CA HTTP Boundary Dec'));
   pass('Real change event loads same-origin yearly archive');
 
