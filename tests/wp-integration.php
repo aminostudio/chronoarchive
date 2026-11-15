@@ -135,6 +135,19 @@ foreach ( array( 'archives', 'arcpromat', 'chronoarchive' ) as $alias ) {
         false !== strpos( $poc_html, '<a ' ) );
 }
 
+// Annual Archive 1.6.0 used esc_attr($tag) as an HTML *tag name*. That
+// does not strip an unquoted attribute from a tag (for example,
+ // tag='ul onmouseover=alert(1)'). This is a source-derived variant,
+ // not an attributed reproduction of CVE-2023-49847.
+foreach ( array( 'archives', 'arcpromat', 'chronoarchive' ) as $alias ) {
+    $variant = '[' . $alias . ' tag=\'ul onmouseover=alert(1)\' limit=\'2\']';
+    $html_variant = do_shortcode( $variant );
+    $assert( 'Annual Archive 1.6.0 unquoted tag handler prevented (' . $alias . ')',
+        0 === strpos( trim( $html_variant ), '<ul>' ) &&
+        false === stripos( $html_variant, 'onmouseover=' ) &&
+        false !== strpos( $html_variant, '<a ' ) );
+}
+
 // The named shortcode_atts_archives hook may return malformed values.
 // This is a typed-input resilience test using real WordPress functions.
 $malformed_shortcode_filter = static function ( $attributes ) {
