@@ -91,7 +91,7 @@ try {
     'http://127.0.0.1:8094/unsafe',
     // Non-HTTP protocols must never navigate or execute JavaScript.
     'javascript:alert(document.domain)',
-    'java\\tscript:alert(document.domain)',
+    'java' + String.fromCharCode(9) + 'script:alert(document.domain)',
     'data:text/html,<script>alert(document.domain)</script>',
   ]) {
     const before = page.url();
