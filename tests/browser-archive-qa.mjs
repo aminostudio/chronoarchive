@@ -271,6 +271,33 @@ try {
     'Post-by-post sort direction is explicit');
   pass('Shortcode builder updates live and copies into system clipboard');
 
+  // Only the SECOND permalink-mode run writes settings. That deliberately
+  // happens after every frontend security fixture is complete, so a settings
+  // save cannot remove the intentionally hostile legacy CSS before QA.
+  if (process.env.CHRONO_BROWSER_TEST_SAVE === '1') {
+    await page.locator('#chronoarchive-default-type').selectOption('monthly');
+    await page.locator('#chronoarchive-default-format').selectOption('option');
+    await page.locator('#chronoarchive-default-order').selectOption('ASC');
+    await page.locator('#chronoarchive-default-limit').fill('4');
+    await page.locator('#chronoarchive-default-select-text').fill('Browse 2026 archives');
+    await page.locator('#chronoarchive-default-count').check();
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'load' }),
+      page.locator('form[action="options.php"] #submit').click(),
+    ]);
+    assert.equal(new URL(page.url()).searchParams.get('settings-updated'), 'true',
+      'WordPress confirms the authenticated Settings API POST');
+    assert.equal(await page.locator('#chronoarchive-default-type').inputValue(), 'monthly');
+    assert.equal(await page.locator('#chronoarchive-default-format').inputValue(), 'option');
+    assert.equal(await page.locator('#chronoarchive-default-order').inputValue(), 'ASC');
+    assert.equal(await page.locator('#chronoarchive-default-limit').inputValue(), '4');
+    assert.equal(await page.locator('#chronoarchive-default-select-text').inputValue(), 'Browse 2026 archives');
+    assert.equal(await page.locator('#chronoarchive-default-count').isChecked(), true);
+    assert.ok((await page.locator('#chronoarchive-generated').innerText()).includes('type="monthly"'),
+      'Shortcode builder initializes from saved, not stale, defaults');
+    pass('Admin Settings API persists six shortcode defaults and reloads the builder');
+  }
+
   assert.deepEqual(javascriptErrors, [], 'No uncaught browser JavaScript errors');
   pass('Chromium runtime generated no uncaught errors');
   console.log('BROWSER RESULT: Chromium archive QA passed');
