@@ -79,12 +79,13 @@ try {
   const xssFixture = page.locator('#chrono-xss-fixture');
   assert.equal(await xssFixture.count(), 1, 'Stored XSS fixture must render');
   const xssLists = xssFixture.locator('ul');
-  assert.equal(await xssLists.count(), 3, 'All shortcode aliases render safe lists');
-  assert.ok(await xssFixture.locator('a').count() >= 3, 'Each alias preserves archive links');
+  assert.equal(await xssLists.count(), 6, 'Three aliases and both XSS tag variants render safe lists');
+  assert.ok(await xssFixture.locator('a').count() >= 6, 'Each safe list preserves archive links');
   assert.equal(await xssFixture.locator('[onmouseover], [onerror], [onclick], script, svg, iframe, a[href^="javascript:"]').count(), 0,
     'No executable markup or event handlers inside injected shortcode render');
   await xssLists.first().hover();
-  assert.deepEqual(unexpectedDialogs, [], 'Hovering formerly vulnerable shortcode must not execute alert');
+  await xssLists.last().hover();
+  assert.deepEqual(unexpectedDialogs, [], 'Hovering quoted and unquoted tag injection must not execute alert');
   pass('CVE-2023-0178 stored shortcode PoC neutralized in browser DOM');
 
   // A historic administrator CSS option can contain raw HTML from an
