@@ -1,8 +1,8 @@
 # ChronoArchive SQL review request
 
 **Status:** Human review required before any stable release or WordPress.org submission.  
-**Candidate:** 2.1.0-beta2, consolidated integration PR #28. LAB remains on the previously installed 2.1.0-beta2 build, not the newer GitHub working-tree fixes.  
-**Tracking:** [issue #4](https://github.com/aminostudio/chronoarchive/issues/4) and [core-parity PR #20](https://github.com/aminostudio/chronoarchive/pull/20).
+**Candidate:** 2.1.0-beta3, installed and reported successfully updated by the maintainer on isolated LAB. Development continues in draft PR #28. No stable 2.1.0 package has been submitted.  
+**Tracking:** dedicated [SQL release blocker #29](https://github.com/aminostudio/chronoarchive/issues/29), [consolidated draft PR #28](https://github.com/aminostudio/chronoarchive/pull/28), and historical [core-parity PR #20](https://github.com/aminostudio/chronoarchive/pull/20). Issue #4 tracks general WordPress integration rather than SQL adjudication.
 
 ## Reviewer decision packet | 15 November 2026
 
