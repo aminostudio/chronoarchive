@@ -87,6 +87,19 @@ try {
   assert.deepEqual(unexpectedDialogs, [], 'Hovering formerly vulnerable shortcode must not execute alert');
   pass('CVE-2023-0178 stored shortcode PoC neutralized in browser DOM');
 
+  // A historic administrator CSS option can contain raw HTML from an
+  // unpatched installation. The test stores a literal </style><script>
+  // in the disposable database, bypassing the current save sanitizer
+  // intentionally, and verifies the frontend's separate output boundary.
+  const customStyle = page.locator('style#chronoarchive-custom-inline-css');
+  assert.equal(await customStyle.count(), 1, 'Legacy CSS is enqueued via WordPress style API');
+  assert.ok((await customStyle.textContent()).includes('.chrono-css-check'),
+    'Expected harmless part of legacy CSS remains available');
+  assert.equal(await page.locator('script#ca-admin-css-xss').count(), 0,
+    'Legacy saved CSS cannot break out into a live script element');
+  assert.deepEqual(unexpectedDialogs, [], 'Legacy CSS payload must not execute JavaScript');
+  pass('Historic administrator CSS HTML breakout neutralized in browser DOM');
+
   // WordPress redirects /?page_id=ID to the canonical pretty URL once
   // rewrites are enabled. A no-op selection must preserve that actual URL.
   const canonicalQaURL = page.url();
