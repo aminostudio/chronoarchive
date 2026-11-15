@@ -119,6 +119,22 @@ $assert( 'Cross-year week correctly linked', false !== strpos( $weekly, 'chrono_
 $unsafe = do_shortcode( '[archives type="yearly" limit="2" tag="script" before="<span onclick=alert(1)>Prefix</span>"]' );
 $assert( 'Invalid container falls back to UL', 0 === strpos( trim( $unsafe ), '<ul>' ) );
 $assert( 'Shortcode event handler removed', false === stripos( $unsafe, 'onclick=' ) );
+
+// CVE-2023-0178: WPScan's published, exact upstream proof of concept is
+// [archives tag='ul onmouseover="alert(1)"']. Test this exact attacker
+// attribute on all three inherited shortcode aliases, using the real
+// WordPress shortcode parser rather than a manually constructed $atts array.
+// Source: https://wpscan.com/vulnerability/cc308e15-7937-4d41-809d-74f8c13bee23/
+foreach ( array( 'archives', 'arcpromat', 'chronoarchive' ) as $alias ) {
+    $poc = '[' . $alias . ' tag=\'ul onmouseover="alert(1)"\' limit=\'2\']';
+    $poc_html = do_shortcode( $poc );
+    $assert( 'CVE-2023-0178 PoC rejects injected tag attribute (' . $alias . ')',
+        0 === strpos( trim( $poc_html ), '<ul>' ) &&
+        false === stripos( $poc_html, 'onmouseover=' ) &&
+        false === stripos( $poc_html, 'alert(1)' ) &&
+        false !== strpos( $poc_html, '<a ' ) );
+}
+
 // The named shortcode_atts_archives hook may return malformed values.
 // This is a typed-input resilience test using real WordPress functions.
 $malformed_shortcode_filter = static function ( $attributes ) {
