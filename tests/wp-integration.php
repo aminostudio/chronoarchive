@@ -938,6 +938,44 @@ $assert( 'CVE class: saved widget render neutralizes executable tags',
     false === stripos( $cve_widget_render, 'onclick=' ) &&
     false === stripos( $cve_widget_render, 'onerror=' ) );
 
+// Annual Archive 1.6.0 persisted widget options with an unsafe array merge.
+// During an upgrade, existing database values can bypass our new update()
+// sanitizer. Assert the direct form and public render sinks are still safe.
+$legacy_raw_instance = array(
+    'title'       => '"><img id="legacy-title-xss" src=x onerror=alert(1)>',
+    'format'      => 'option',
+    'type'        => 'yearly',
+    'select_text' => '</option><svg id="legacy-select-xss" onload=alert(1)>',
+    'before'      => '<script id="legacy-before-xss">alert(1)</script>',
+    'after'       => '<img id="legacy-after-xss" src=x onerror=alert(1)>',
+    'limit'       => '2',
+);
+ob_start();
+$widget->form( $legacy_raw_instance );
+$legacy_form_html = ob_get_clean();
+$assert( 'Annual Archive 1.6.0 raw saved widget never inserts active admin tags',
+    false === stripos( $legacy_form_html, '<img' ) &&
+    false === stripos( $legacy_form_html, '<svg' ) &&
+    false === stripos( $legacy_form_html, '<script' ) &&
+    false === preg_match( '/<[^>]+\son(?:load|error|click|mouseover)\s*=/i', $legacy_form_html ) );
+foreach ( array( 'option', 'html' ) as $legacy_format ) {
+    $legacy_raw_instance['format'] = $legacy_format;
+    ob_start();
+    $widget->widget( array(
+        'before_widget' => '<aside>', 'after_widget' => '</aside>',
+        'before_title' => '<h3>', 'after_title' => '</h3>',
+    ), $legacy_raw_instance );
+    $legacy_render_html = ob_get_clean();
+    $assert( 'Annual Archive 1.6.0 raw widget values safe in ' . $legacy_format,
+        false !== strpos( $legacy_render_html, '<a ' ) ||
+        'option' === $legacy_format && false !== strpos( $legacy_render_html, '<select' ) );
+    $assert( 'Annual Archive 1.6.0 raw widget has no executable nodes in ' . $legacy_format,
+        false === stripos( $legacy_render_html, '<script' ) &&
+        false === stripos( $legacy_render_html, '<svg' ) &&
+        false === preg_match( '/<[^>]+\son(?:load|error|click|mouseover)\s*=/i', $legacy_render_html ) &&
+        false === stripos( $legacy_render_html, 'href="javascript:' ) );
+}
+
 register_post_type( 'ca_qa_public', array( 'public' => true, 'has_archive' => false ) );
 $cpt_id = wp_insert_post( array(
     'post_type' => 'ca_qa_public', 'post_status' => 'publish',
