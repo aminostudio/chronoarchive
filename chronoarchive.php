@@ -708,8 +708,8 @@ class WP_Plugin_ChronoArchive {
 			'showcount'       => '0',
 			'tag'             => 'ul',
 			'order'           => $this->options['default_order'],
-			'alpha_order'     => 'ASC',
-			'post_order'      => 'DESC',
+			'alpha_order'     => 'alpha' === $this->options['default_type'] ? $this->options['default_order'] : 'ASC',
+			'post_order'      => 'postbypost' === $this->options['default_type'] ? $this->options['default_order'] : 'DESC',
 			'select_text'     => $this->options['default_select_text'],
 			'post_type'       => 'post',
 			'use_cpt_archive' => $this->options['use_cpt_archive']
@@ -1070,7 +1070,9 @@ class WP_Plugin_ChronoArchive {
 			$saved_options = get_option( $this->domain . 'options' );
 		}
 		if ( ! is_array( $saved_options ) ) {
-			return;
+			// A reset or removed option must restore defaults in this request,
+			// rather than retaining stale values from a previous load.
+			$saved_options = array();
 		}
 		$this->options['custom_css'] = isset( $saved_options['custom_css'] ) &&
 			is_string( $saved_options['custom_css'] )
