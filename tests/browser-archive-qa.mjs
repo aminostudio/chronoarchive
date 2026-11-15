@@ -17,7 +17,13 @@ const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 const javascriptErrors = [];
 const offsiteRequests = [];
+const dropdownResponses = [];
 page.on('pageerror', (error) => javascriptErrors.push(error.message));
+page.on('response', (response) => {
+  if (response.url().includes('/assets/js/archive-dropdown.js')) {
+    dropdownResponses.push({status: response.status(), mime: response.headers()['content-type'] || ''});
+  }
+});
 page.on('request', (request) => {
   if (request.url().includes('blocked.example.invalid')) {
     offsiteRequests.push(request.url());
@@ -50,6 +56,9 @@ try {
   assert.equal(await page.getByRole('combobox', { name: 'Choose archive' }).count(), 3);
   const dropdownAsset = page.locator('script[src*="archive-dropdown.js"]');
   assert.equal(await dropdownAsset.count(), 1, 'Plugin JS must be enqueued on page');
+  assert.ok(dropdownResponses.some((response) =>
+    response.status === 200 && /javascript/i.test(response.mime)),
+  'Dropdown asset must actually load as JavaScript, not HTML from a router');
   pass('Three labelled, unique dropdowns and one script present');
 
   const yearSelect = dropdowns.first();

@@ -102,7 +102,7 @@ jobs:
             --post_date='2019-12-31 12:00:00' --post_status=publish --porcelain >/dev/null
           "${wpcli[@]}" post create --post_title='CA HTTP Boundary Jan' \
             --post_date='2020-01-01 12:00:00' --post_status=publish --porcelain >/dev/null
-          php -S 127.0.0.1:8093 -t /tmp/chrono-wp /tmp/chrono-wp/index.php \
+          php -S 127.0.0.1:8093 -t /tmp/chrono-wp "$PWD/tests/ci-browser-router.php" \
             >/tmp/chrono-http-server.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
@@ -212,7 +212,7 @@ jobs:
             --post_content="$(cat /tmp/chrono-browser-qa-content.txt)" --porcelain)
           test -n "$page_id"
           echo "Disposable browser QA page ID: $page_id"
-          php -S 127.0.0.1:8093 -t /tmp/chrono-wp /tmp/chrono-wp/index.php \
+          php -S 127.0.0.1:8093 -t /tmp/chrono-wp "$PWD/tests/ci-browser-router.php" \
             >/tmp/chrono-browser-server.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT

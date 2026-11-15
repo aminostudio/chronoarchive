@@ -103,3 +103,22 @@ rather than hard-coding their destinations.
 
 This patch is on the development branch only; the installed LAB beta2
 has **not** been altered.
+
+
+## Browser asset routing: another false-confidence gap closed
+
+The test's first annual dropdown navigation hung, despite successful
+cross-year week/decade clicks. Investigation identified the **CI-only PHP
+built-in server router**: passing WordPress's `index.php` directly as the
+router caused every CSS/JS request to resolve to HTML instead of a static
+file. Merely checking for a `<script>` element had not proved that the
+browser downloaded or executed JavaScript. This did not indicate a
+new bug in the deployed WordPress plugin.
+
+The CI now uses a minimal `tests/ci-browser-router.php` that returns
+`false` for real canonicalized files within the disposable document root,
+letting PHP serve JavaScript and CSS with appropriate MIME types. Browser
+assertions explicitly require a **200 JavaScript response** for
+`archive-dropdown.js` before testing same-origin selection navigation.
+The previous HTTP archive tests still exercise the same WordPress
+routes with this more representative server behavior.
