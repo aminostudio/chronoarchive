@@ -78,8 +78,8 @@ def main(argv: list[str]) -> int:
         "- The *official* scanner remains blocking once the PR is ready for review.",
         "",
     ]
-    lines += [f"- Existing blocker: \`{item}\`" for item in known]
-    lines += [f"- **NEW:** \`{item}\`" for item in unexpected]
+    lines += [f"- Existing blocker: `{item}`" for item in known]
+    lines += [f"- **NEW:** `{item}`" for item in unexpected]
     summary = os.getenv("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as target:
