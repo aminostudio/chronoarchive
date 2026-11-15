@@ -36,6 +36,8 @@ class CA_Fake_Query {
 }
 class CA_Fake_DB {
     public $posts = 'wp_posts';
+    // WordPress wpdb exposes last_error; mirror it for SQL cache tests.
+    public $last_error = '';
 
     public function prepare( $sql, $argument ) {
         return str_replace( '%s', "'" . str_replace( "'", "''", $argument ) . "'", $sql );
