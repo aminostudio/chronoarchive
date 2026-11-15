@@ -48,8 +48,10 @@ jobs:
       - name: Upload private QA workflow artifact (not a release)
         uses: actions/upload-artifact@v4
         with:
-          name: chronoarchive-2.1.0-beta2-LAB-NOT-PRODUCTION
-          path: dist/chronoarchive-2.1.0-beta2-LAB.zip
+          name: chronoarchive-2.1.0-beta2-QA-NOT-PRODUCTION
+          path: |
+            dist/chronoarchive-2.1.0-beta2-LAB.zip
+            dist/chronoarchive-2.1.0-beta2-WPORG-QA.zip
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
