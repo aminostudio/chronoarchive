@@ -73,6 +73,20 @@ try {
   'Dropdown asset must actually load as JavaScript, not HTML from a router');
   pass('Three labelled, unique dropdowns and one script present');
 
+  // Reproduce the public CVE-2023-0178 stored shortcode payload in actual
+  // WordPress-rendered HTML. Test active DOM attributes and mouse interaction,
+  // not only escaped HTML strings returned by PHP integration functions.
+  const xssFixture = page.locator('#chrono-xss-fixture');
+  assert.equal(await xssFixture.count(), 1, 'Stored XSS fixture must render');
+  const xssLists = xssFixture.locator('ul');
+  assert.equal(await xssLists.count(), 3, 'All shortcode aliases render safe lists');
+  assert.ok(await xssFixture.locator('a').count() >= 3, 'Each alias preserves archive links');
+  assert.equal(await xssFixture.locator('[onmouseover], [onerror], [onclick], script, svg, iframe, a[href^="javascript:"]').count(), 0,
+    'No executable markup or event handlers inside injected shortcode render');
+  await xssLists.first().hover();
+  assert.deepEqual(unexpectedDialogs, [], 'Hovering formerly vulnerable shortcode must not execute alert');
+  pass('CVE-2023-0178 stored shortcode PoC neutralized in browser DOM');
+
   // WordPress redirects /?page_id=ID to the canonical pretty URL once
   // rewrites are enabled. A no-op selection must preserve that actual URL.
   const canonicalQaURL = page.url();
