@@ -25,6 +25,8 @@ RUNTIME_FILES = (
     "readme.txt",
     "LICENSE",
     "assets/js/archive-dropdown.js",
+    "assets/js/admin-settings.js",
+    "assets/css/admin-settings.css",
     "js/widget_form.js",
     "docs/NOTICE.md",
 )
