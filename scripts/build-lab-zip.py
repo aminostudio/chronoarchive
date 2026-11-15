@@ -65,8 +65,13 @@ def verify_source() -> dict[str, bytes]:
         path = ROOT / relative
         if not path.is_file() or path.is_symlink():
             raise ValueError(f"Missing or unsafe package file: {relative}")
-        if path.resolve().parent != path.parent.resolve():
-            raise ValueError(f"Unsafe package path: {relative}")
+        # No parent directory may be a symlink, even one that resolves to
+        # an existing file outside the repository. The previous parent
+        # comparison allowed that case and could package unexpected bytes.
+        if any(part.is_symlink() for part in (path.parent, *path.parents)):
+            raise ValueError(f"Symlinked package parent: {relative}")
+        if not path.resolve().is_relative_to(ROOT.resolve()):
+            raise ValueError(f"Package path escapes repository: {relative}")
         payload = path.read_bytes()
         if not payload:
             raise ValueError(f"Empty package file: {relative}")
