@@ -15,7 +15,9 @@ concurrency:
 jobs:
   distribution-plugin-check:
     name: WordPress Plugin Check · packaged beta2
-    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && startsWith(github.head_ref, 'integration/'))
+    # Scan exact ZIP for the consolidated review even while it is a draft.
+    # Diagnostic in draft; mandatory when marked ready for review.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'integration/') || github.event.pull_request.base.ref == 'develop/import-lab-beta1'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +31,7 @@ jobs:
           test -f dist/plugin-check-input/ChronoArchive/chronoarchive.php
           test -f dist/plugin-check-input/ChronoArchive/readme.txt
       - name: Run official Plugin Check on extracted distribution, no ignores
+        continue-on-error: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == true }}
         uses: wordpress/plugin-check-action@v1
         with:
           build-dir: './dist/plugin-check-input/ChronoArchive'
