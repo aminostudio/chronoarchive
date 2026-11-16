@@ -73,10 +73,25 @@ jobs:
             --admin_password=ci-only-password-unsafe-to-reuse \
             --admin_email=ci@example.test \
             --skip-email
-          mkdir -p /tmp/chrono-wp/wp-content/plugins/chronoarchive
-          cp chronoarchive.php readme.txt /tmp/chrono-wp/wp-content/plugins/chronoarchive/
-          cp -R assets js tests /tmp/chrono-wp/wp-content/plugins/chronoarchive/
-          php /tmp/wp-cli.phar plugin activate chronoarchive --path=/tmp/chrono-wp
+          if [[ '${{ matrix.wp }}' == 'latest' && '${{ matrix.php }}' == '8.4' ]]; then
+            # The final compatibility/browser matrix installs the EXACT
+            # lowercase-slug WordPress.org QA ZIP. Other matrix versions use
+            # a source checkout so every PHP compatibility combination runs.
+            python3 scripts/build-wporg-zip.py --output /tmp/chronoarchive-ci-wporg-qa.zip
+            php /tmp/wp-cli.phar plugin install /tmp/chronoarchive-ci-wporg-qa.zip --activate --path=/tmp/chrono-wp
+            test -f /tmp/chrono-wp/wp-content/plugins/chronoarchive/chronoarchive.php
+            test ! -d /tmp/chrono-wp/wp-content/plugins/ChronoArchive
+            test "$(php /tmp/wp-cli.phar plugin get chronoarchive --field=version --path=/tmp/chrono-wp)" = "2.1.0-beta3"
+            # CI tests are copied after installation; no tests are shipped in
+            # the installable ZIP itself.
+            cp -R tests /tmp/chrono-wp/wp-content/plugins/chronoarchive/
+            echo "PASS: WordPress.org-shaped candidate ZIP installed and activated"
+          else
+            mkdir -p /tmp/chrono-wp/wp-content/plugins/chronoarchive
+            cp chronoarchive.php readme.txt /tmp/chrono-wp/wp-content/plugins/chronoarchive/
+            cp -R assets js tests /tmp/chrono-wp/wp-content/plugins/chronoarchive/
+            php /tmp/wp-cli.phar plugin activate chronoarchive --path=/tmp/chrono-wp
+          fi
       - name: Run real WordPress integration checks
         shell: bash
         run: |
