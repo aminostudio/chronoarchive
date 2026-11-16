@@ -1245,7 +1245,12 @@ class ChronoArchive_Widget extends WP_Widget {
 		$instance['before'] = wp_kses_post( self::legacy_text( $new_instance, 'before' ) );
 		$instance['after'] = wp_kses_post( self::legacy_text( $new_instance, 'after' ) );
 		$instance['select_text'] = sanitize_text_field( self::legacy_text( $new_instance, 'select_text' ) );
-		$instance['limit'] = empty( $new_instance['limit'] ) ? '' : absint( self::legacy_text( $new_instance, 'limit' ) );
+		// Widget saves must enforce the same all-decimal LIMIT contract as
+		// shortcode() and wp_get_archives_advanced(). absint('3 UNION ...')
+		// silently accepts the prefix 3; it is not valid widget input.
+		$limit_text = trim( self::legacy_text( $new_instance, 'limit' ) );
+		$instance['limit'] = '' !== $limit_text && preg_match( '/^[0-9]+$/D', $limit_text )
+			? absint( $limit_text ) : '';
 		$instance['show_post_count'] = ! empty( $new_instance['show_post_count'] ) ? 1 : 0;
 		$instance['post_type'] = sanitize_key( self::legacy_text( $new_instance, 'post_type', 'post' ) );
 		$type = sanitize_key( self::legacy_text( $new_instance, 'type', 'yearly' ) );
