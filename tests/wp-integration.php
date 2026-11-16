@@ -397,6 +397,56 @@ if ( ! is_wp_error( $join_post ) ) {
     remove_filter( 'posts_join', $native_join, 10 );
 }
 
+// Native restrictions must still run after an unrestricted grouped-cache hit.
+// Core's comment-closing filter normally disables this optimization. Sites
+// may remove it; exercise that supported configuration and restore it below.
+$restore_comment_filter = remove_filter( 'the_posts', '_close_comments_for_old_posts', 10 );
+// Toggle request-local policy without changing user ID or posts last_changed:
+// persistent object caches can otherwise expose excluded archive dates/counts.
+foreach ( array( 'parse_query', 'pre_get_posts', 'posts_search', 'posts_where_paged',
+    'posts_where_request', 'posts_clauses_request', 'posts_request' ) as $policy_hook ) {
+    $restrict_archive = false;
+    $archive_policy = static function ( $value, $query = null ) use ( &$restrict_archive, $policy_hook ) {
+        $query = $value instanceof WP_Query ? $value : $query;
+        if ( ! $query instanceof WP_Query || ! $query->get( 'chronoarchive_origin' ) || ! $restrict_archive ) {
+            return $value;
+        }
+        if ( $value instanceof WP_Query ) {
+            $value->set( 'post__in', array( 0 ) );
+        } elseif ( is_array( $value ) ) {
+            $value['where'] .= ' AND 1=0';
+        } elseif ( 'posts_request' === $policy_hook ) {
+            $value = preg_replace( '/\\bWHERE\\b/', 'WHERE 1=0 AND', $value, 1 );
+        } else {
+            $value .= ' AND 1=0';
+        }
+        return $value;
+    };
+    foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade' ) as $policy_mode ) {
+        wp_cache_flush();
+        $policy_args = array( 'type' => $policy_mode, 'echo' => 0, 'show_post_count' => true );
+        $unrestricted_archive = WP_Plugin_ChronoArchive::wp_get_archives_advanced( $policy_args );
+        $assert( 'Unrestricted archive primes cache (' . $policy_hook . '/' . $policy_mode . ')',
+            is_string( $unrestricted_archive ) && false !== strpos( $unrestricted_archive, '<li>' ) );
+        // Priority zero also needs strict has_filter() detection.
+        add_filter( $policy_hook, $archive_policy, 0, 2 );
+        $open_archive = WP_Plugin_ChronoArchive::wp_get_archives_advanced( $policy_args );
+        $restrict_archive = true;
+        $restricted_archive = WP_Plugin_ChronoArchive::wp_get_archives_advanced( $policy_args );
+        $assert( 'Warm archive respects native restriction (' . $policy_hook . '/' . $policy_mode . ')',
+            '' === $restricted_archive && '' === $wpdb->last_error );
+        $restrict_archive = false;
+        $assert( 'Request-local policy can reopen archive (' . $policy_hook . '/' . $policy_mode . ')',
+            $open_archive === $unrestricted_archive &&
+            WP_Plugin_ChronoArchive::wp_get_archives_advanced( $policy_args ) === $unrestricted_archive );
+        remove_filter( $policy_hook, $archive_policy, 0 );
+    }
+}
+
+if ( $restore_comment_filter ) {
+    add_filter( 'the_posts', '_close_comments_for_old_posts', 10, 2 );
+}
+
 // All individual listing modes are native WP_Query, even when a no-op
 // historical archive SQL callback has been registered.
 $native_observed = 0;
