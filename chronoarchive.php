@@ -733,7 +733,15 @@ class WP_Plugin_ChronoArchive {
 
 		$type            = sanitize_key( $atts['type'] );
 		$type            = in_array( $type, array( 'daily', 'weekly', 'monthly', 'yearly', 'decade', 'alpha', 'postbypost' ), true ) ? $type : 'yearly';
-		$limit           = '' !== $atts['limit'] ? absint( $atts['limit'] ) : '';
+		// Match the direct API's strict SQL LIMIT validation. Calling
+		// absint() here first would silently accept a numeric prefix such
+		// as "1 UNION SELECT..." as the valid limit 1. Reject the whole
+		// shortcode rather than rendering an unexpectedly broad archive.
+		$limit_input     = trim( $atts['limit'] );
+		if ( '' !== $limit_input && ! preg_match( '/^[0-9]+$/D', $limit_input ) ) {
+			return '';
+		}
+		$limit           = '' !== $limit_input ? absint( $limit_input ) : '';
 		$format          = sanitize_key( $atts['format'] );
 		$format          = in_array( $format, array( 'html', 'option', 'link', 'custom' ), true ) ? $format : 'html';
 		$before          = wp_kses_post( $atts['before'] );
