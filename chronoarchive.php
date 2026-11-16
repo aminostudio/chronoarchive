@@ -404,17 +404,28 @@ class WP_Plugin_ChronoArchive {
 			self::VERSION, $type, $post_type, $order, $limit, $start_day,
 			$last_changed, get_current_user_id(),
 		) ) );
-		// A WHERE/JOIN filter may vary by request, visitor or transient state.
-		// Never leak one request's filtered archive into another via our cache.
-		// has_filter() may return integer priority 0. Only strict false
-		// means the hook has no callbacks. Short-circuit filters may also
-		// vary per visitor; bypass our grouped cache in those cases.
-		$cacheable = false === has_filter( 'posts_where' ) &&
-			false === has_filter( 'posts_join' ) &&
-			false === has_filter( 'posts_clauses' ) &&
-			false === has_filter( 'posts_pre_query' ) &&
-			false === has_filter( 'posts_results' ) &&
-			false === has_filter( 'the_posts' );
+		// Native query policies can vary without changing the post-cache token
+		// or current user. A cache hit must not skip those policies, including
+		// pre_get_posts and late SQL-clause hooks. Let WP_Query cache its own
+		// queries when any result-shaping callback is installed.
+		$query_hooks = array(
+			'parse_query', 'pre_get_posts', 'posts_search',
+			'posts_where', 'posts_join', 'posts_where_paged', 'posts_join_paged',
+			'posts_groupby', 'posts_orderby', 'posts_distinct', 'post_limits',
+			'posts_fields', 'posts_clauses', 'posts_selection',
+			'posts_where_request', 'posts_join_request', 'posts_groupby_request',
+			'posts_orderby_request', 'posts_distinct_request',
+			'posts_fields_request', 'post_limits_request', 'posts_clauses_request',
+			'posts_request', 'posts_pre_query', 'posts_results', 'the_posts',
+		);
+		$cacheable = true;
+		foreach ( $query_hooks as $query_hook ) {
+			// Priority zero is a registered callback, too.
+			if ( false !== has_filter( $query_hook ) ) {
+				$cacheable = false;
+				break;
+			}
+		}
 		$cached = $cacheable ? wp_cache_get( $cache_key, 'posts' ) : false;
 		if ( false !== $cached && is_array( $cached ) ) {
 			return $cached;
