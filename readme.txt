@@ -67,6 +67,10 @@ No. Version 2.1.0-beta3 is a development build. Public stable release and WordPr
 
 Yes. `[archives]` and `[arcpromat]` are retained. Prefer `[chronoarchive]` for new sites.
 
+= Should Annual Archive stay active after migrating? =
+
+No. Both extensions register the `[archives]` and `[arcpromat]` shortcodes, so running them together can produce unpredictable results. Back up your site, check the archived pages and widgets, then deactivate Annual Archive. ChronoArchive displays an administrator-only warning when it detects that both are active. It never disables another plugin automatically.
+
 = What archive types can I request? =
 
 Use `yearly`, `monthly`, `weekly`, `daily`, `decade`, `alpha` or `postbypost` in the `type` attribute.
