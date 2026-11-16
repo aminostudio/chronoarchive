@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import runpy
 import shutil
+import re
 from pathlib import Path
 import tempfile
 
@@ -31,6 +32,28 @@ def run_fixture(relative_script: str, manifest_name: str, entrypoint: str) -> No
             target = working / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / name, target)
+
+        if entrypoint == "verify_source":
+            # The LAB builder intentionally accepts beta3 only. Exercise its
+            # path-confinement guard even when CI is running the independent
+            # 2.1.0 stable preflight, using only disposable fixture metadata.
+            expected = namespace["EXPECTED_VERSION"]
+            php_path = working / "chronoarchive.php"
+            php = php_path.read_text(encoding="utf-8")
+            php = re.sub(r"(?m)^Version: .+$", "Version: " + expected, php, count=1)
+            php = re.sub(
+                r"(?m)^(\\s*const\\s+VERSION\\s*=\\s*')[^']+(';)$",
+                lambda m: m.group(1) + expected + m.group(2),
+                php, count=1,
+            )
+            php_path.write_text(php, encoding="utf-8")
+            readme_path = working / "readme.txt"
+            readme = readme_path.read_text(encoding="utf-8")
+            readme = re.sub(
+                r"(?m)^Stable tag: .+$", "Stable tag: " + expected,
+                readme, count=1,
+            )
+            readme_path.write_text(readme, encoding="utf-8")
 
         globals_ = original.__globals__
         previous_root = globals_["ROOT"]
