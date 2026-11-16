@@ -739,7 +739,12 @@ class WP_Plugin_ChronoArchive {
 			$native_query = new WP_Query( $query_args );
 			$results = $native_query->posts;
 			if ( $results ) {
+				$listed_ids = array();
 				foreach ( (array) $results as $result ) {
+					if ( isset( $listed_ids[ $result->ID ] ) ) {
+						continue;
+					}
+					$listed_ids[ $result->ID ] = true;
 					if ( $result->post_date != '0000-00-00 00:00:00' ) {
 						$url = get_permalink( (int) $result->ID );
 						$filtered_title = $result->post_title ? apply_filters( 'the_title', $result->post_title, $result->ID ) : $result->ID;
