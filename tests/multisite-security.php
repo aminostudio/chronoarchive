@@ -95,6 +95,28 @@ $check( 'Subsite admin sees CSS setting disabled',
 
 wp_set_current_user( $super_id );
 $check( 'Super admin may edit CSS', current_user_can( 'edit_css' ) );
+
+// Network-active Annual Archive is a distinct collision case from a
+// single-site activation. Simulate it in disposable CI and restore the
+// network activation record immediately afterwards.
+$existing_network_plugins = get_site_option( 'active_sitewide_plugins', array() );
+$existing_network_plugins = is_array( $existing_network_plugins ) ? $existing_network_plugins : array();
+ob_start();
+$plugin->legacy_plugin_conflict_notice();
+$no_network_conflict = ob_get_clean();
+$check( 'No network predecessor notice without a collision', '' === $no_network_conflict );
+$simulated_network_plugins = $existing_network_plugins;
+$simulated_network_plugins['anual-archive/annual_archive.php'] = time();
+update_site_option( 'active_sitewide_plugins', $simulated_network_plugins );
+ob_start();
+$plugin->legacy_plugin_conflict_notice();
+$network_conflict = ob_get_clean();
+$check( 'Super admin sees network-wide legacy shortcode conflict',
+    false !== strpos( $network_conflict, 'notice-warning' ) &&
+    false !== strpos( $network_conflict, '[archives]' ) &&
+    false !== strpos( $network_conflict, '[arcpromat]' ) );
+update_site_option( 'active_sitewide_plugins', $existing_network_plugins );
+
 $approved = $plugin->sanitize_settings( array(
     'custom_css' => '.reviewed{color:navy}',
     'use_cpt_archive' => '1',
