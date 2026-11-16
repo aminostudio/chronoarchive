@@ -423,6 +423,8 @@ class WP_Plugin_ChronoArchive {
 			$query_args = array(
 				'post_type'              => $post_type,
 				'post_status'            => 'publish',
+				// Marker for third-party native WP_Query filters. No SQL.
+				'chronoarchive_origin'   => 1,
 				'posts_per_page'         => $batch_size,
 				'paged'                  => $page,
 				'orderby'                => array( 'date' => 'DESC', 'ID' => 'DESC' ),
@@ -725,6 +727,7 @@ class WP_Plugin_ChronoArchive {
 			$query_args = array(
 				'post_type'              => $r['post_type'],
 				'post_status'            => 'publish',
+				'chronoarchive_origin'   => 1,
 				'posts_per_page'         => $listing_limit > 0 ? $listing_limit : -1,
 				'ignore_sticky_posts'    => true,
 				'no_found_rows'          => true,
