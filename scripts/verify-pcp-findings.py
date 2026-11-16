@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Fail draft CI on *new* WordPress Plugin Check findings without waiving release.
+"""Validate the official Plugin Check result for development and stable candidates.
 
-The two existing SQL errors and one direct-query warning are a known
-RELEASE-BLOCKING baseline, not approved suppressions. This tool only checks
-that the draft QA candidate did not introduce additional scanner findings.
-Marking the PR ready still runs the *unmodified* blocking official scanner.
+The historical beta3 SQL baseline was explicitly not release approval.
+Stable 2.1.0 preflight rejects ANY scanner errors or warnings, including
+reappearance of formerly known SQL codes. No sniffs are suppressed.
 """
 from __future__ import annotations
 
@@ -12,6 +11,7 @@ import collections
 import json
 import os
 from pathlib import Path
+import re
 import sys
 
 KNOWN_SQL = {
@@ -33,6 +33,11 @@ def parse_report(text: str) -> object:
     if not source:
         # Official scanner execution must succeed before a blank clean report
         # is accepted. This verifier alone does not grant release approval.
+        return {}
+    # The official Plugin Check action prints this exact success line rather
+    # than JSON when absolutely no issues are present. Only this precise
+    # sentinel can bypass FILE: section parsing; reject any appended text.
+    if source == "Success: Checks complete. No errors found.":
         return {}
     try:
         return json.loads(source)
@@ -76,15 +81,18 @@ def findings_from(raw: object) -> list[tuple[str, str, str]]:
     return parsed
 
 
-def evaluate(raw: object) -> tuple[list[str], list[str]]:
+def evaluate(raw: object, *, stable_release: bool = False) -> tuple[list[str], list[str]]:
     findings = findings_from(raw)
     unexpected = []
     known = []
     counts = collections.Counter()
     for path, code, severity in findings:
         if path == "chronoarchive.php" and KNOWN_SQL.get(code) == severity:
-            counts[(path, code, severity)] += 1
-            known.append(f"{severity}: {code}")
+            if stable_release:
+                unexpected.append(f"{path}: unresolved former SQL blocker {severity}: {code}")
+            else:
+                counts[(path, code, severity)] += 1
+                known.append(f"{severity}: {code}")
         else:
             unexpected.append(f"{path}: {severity}: {code}")
     for (path, code, severity), count in counts.items():
@@ -103,7 +111,10 @@ def main(argv: list[str]) -> int:
         return 1
     try:
         raw = parse_report(path.read_text(encoding="utf-8-sig"))
-        known, unexpected = evaluate(raw)
+        php = Path(__file__).resolve().parents[1] / "chronoarchive.php"
+        source = php.read_text(encoding="utf-8")
+        stable_release = bool(re.search(r"(?m)^Version:\s*[0-9]+\.[0-9]+\.[0-9]+\s*$", source))
+        known, unexpected = evaluate(raw, stable_release=stable_release)
     except (OSError, ValueError, UnicodeDecodeError) as error:
         print(f"CHECK FAILED: invalid scanner output: {error}", file=sys.stderr)
         return 1
@@ -112,7 +123,7 @@ def main(argv: list[str]) -> int:
         "",
         f"- Existing **unresolved** SQL findings: {len(known)}",
         f"- Unexpected new findings: {len(unexpected)}",
-        "- Draft-only regression status is **not WordPress.org release approval**.",
+        "- Scanner findings are strict-blocking on stable candidates; beta3 historical baseline is advisory only.",
         "- The *official* scanner remains blocking once the PR is ready for review.",
         "",
     ]
