@@ -406,8 +406,15 @@ class WP_Plugin_ChronoArchive {
 		) ) );
 		// A WHERE/JOIN filter may vary by request, visitor or transient state.
 		// Never leak one request's filtered archive into another via our cache.
-		$cacheable = ! has_filter( 'posts_where' ) && ! has_filter( 'posts_join' ) &&
-			! has_filter( 'posts_clauses' );
+		// has_filter() may return integer priority 0. Only strict false
+		// means the hook has no callbacks. Short-circuit filters may also
+		// vary per visitor; bypass our grouped cache in those cases.
+		$cacheable = false === has_filter( 'posts_where' ) &&
+			false === has_filter( 'posts_join' ) &&
+			false === has_filter( 'posts_clauses' ) &&
+			false === has_filter( 'posts_pre_query' ) &&
+			false === has_filter( 'posts_results' ) &&
+			false === has_filter( 'the_posts' );
 		$cached = $cacheable ? wp_cache_get( $cache_key, 'posts' ) : false;
 		if ( false !== $cached && is_array( $cached ) ) {
 			return $cached;
