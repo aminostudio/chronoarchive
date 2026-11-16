@@ -375,39 +375,132 @@ class WP_Plugin_ChronoArchive {
 
 
 	/**
-	 * Execute and cache an archive statement with a pre-prepared predicate.
+	 * Build grouped archive rows through native WordPress queries.
 	 *
-	 * Keep the six inherited aggregate queries behind ONE audited SQL sink.
-	 * Their SQL includes trusted WordPress getarchives_where/getarchives_join
-	 * extension fragments, which remain the responsibility of the registering
-	 * PHP callback. Passing a whole fragment as an SQL string value to
-	 * wpdb::prepare() would be incorrect.
+	 * Fetch published posts in bounded batches rather than assembling SQL
+	 * fragments or loading an entire large site into PHP memory. Only public
+	 * post types reach this method. Query pagination is deterministic, duplicate
+	 * JOIN rows are deduplicated by post ID and a cache-generation token
+	 * invalidates results whenever WordPress updates its posts cache.
 	 *
-	 * Cache keys intentionally preserve the historical format so an empty
-	 * result is a valid cache hit, and a WordPress posts last_changed update
-	 * invalidates the archive without manual cache deletion.
+	 * Native posts_where/posts_join/pre_get_posts hooks continue to work.
+	 * Historic getarchives_where/getarchives_join SQL-fragment hooks cannot
+	 * be safely translated to structured WP_Query arguments and are intentionally
+	 * unsupported by this first public release. See the 2.1.0 upgrade note.
 	 *
-	 * @param string $query        SQL including the prepared core WHERE predicate.
-	 * @param string $last_changed WordPress posts cache-generation token.
-	 * @return array|null Archive rows or empty/null on database failure.
+	 * @param string $type         Yearly, monthly, daily, weekly or decade.
+	 * @param string $post_type    Registered and viewable WordPress post type.
+	 * @param string $order        ASC or DESC.
+	 * @param int    $limit        Maximum distinct buckets, 0 for all.
+	 * @param string $last_changed WordPress cache invalidation token.
+	 * @return array Archive records with the historical field names.
 	 */
-	private static function cached_archive_rows( $query, $last_changed ) {
+	private static function grouped_archive_rows( $type, $post_type, $order, $limit, $last_changed ) {
 		global $wpdb;
 
-		$key = 'wp_get_archives_advanced:' . md5( $query ) . ':' . $last_changed;
-		$results = wp_cache_get( $key, 'posts' );
-
-		if ( false === $results ) {
-			$results = $wpdb->get_results( $query );
-			// WordPress can return an empty array even when the SQL itself
-			// failed. Check last_error as well as the result type, or a
-			// temporary DB failure is cached as a legitimate empty archive.
-			if ( is_array( $results ) && '' === $wpdb->last_error ) {
-				wp_cache_set( $key, $results, 'posts' );
-			}
+		$start_day = (int) get_option( 'start_of_week', 1 );
+		$start_day = $start_day >= 0 && $start_day <= 6 ? $start_day : 1;
+		$cache_key = 'ca_grouped:' . md5( serialize( array(
+			self::VERSION, $type, $post_type, $order, $limit, $start_day,
+			$last_changed, get_current_user_id(),
+		) ) );
+		// A WHERE/JOIN filter may vary by request, visitor or transient state.
+		// Never leak one request's filtered archive into another via our cache.
+		$cacheable = ! has_filter( 'posts_where' ) && ! has_filter( 'posts_join' ) &&
+			! has_filter( 'posts_clauses' );
+		$cached = $cacheable ? wp_cache_get( $cache_key, 'posts' ) : false;
+		if ( false !== $cached && is_array( $cached ) ) {
+			return $cached;
 		}
 
-		return $results;
+		$buckets = array();
+		$seen = array();
+		$batch_size = 250;
+		$page = 1;
+		do {
+			// Preserve native post query hooks, used by compatible site plugins
+			// and the standard WordPress permission/filtering pipeline.
+			$query_args = array(
+				'post_type'              => $post_type,
+				'post_status'            => 'publish',
+				'posts_per_page'         => $batch_size,
+				'paged'                  => $page,
+				'orderby'                => array( 'date' => 'DESC', 'ID' => 'DESC' ),
+				'ignore_sticky_posts'    => true,
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+				'suppress_filters'       => false,
+			);
+			$wpdb->last_error = '';
+			$native = new WP_Query( $query_args );
+			if ( '' !== $wpdb->last_error ) {
+				// A failed query must never populate the archive cache.
+				return array();
+			}
+			$posts = is_array( $native->posts ) ? $native->posts : array();
+			$received = count( $posts );
+			foreach ( $posts as $post ) {
+				if ( ! $post instanceof WP_Post || isset( $seen[ $post->ID ] ) ) {
+					continue;
+				}
+				$seen[ $post->ID ] = true;
+				$ymd = substr( $post->post_date, 0, 10 );
+				if ( ! preg_match( '/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}$/D', $ymd ) ) {
+					continue;
+				}
+				$year = (int) substr( $ymd, 0, 4 );
+				$month = (int) substr( $ymd, 5, 2 );
+				$day = (int) substr( $ymd, 8, 2 );
+				if ( $month < 1 || $month > 12 || $day < 1 || $day > 31 ) {
+					continue;
+				}
+				if ( 'yearly' === $type ) {
+					$key = (string) $year;
+					$row = array( 'year' => $year, 'posts' => 0 );
+				} elseif ( 'monthly' === $type ) {
+					$key = substr( $ymd, 0, 7 );
+					$row = array( 'year' => $year, 'month' => $month, 'posts' => 0 );
+				} elseif ( 'daily' === $type ) {
+					$key = $ymd;
+					$row = array( 'year' => $year, 'month' => $month, 'dayofmonth' => $day, 'posts' => 0 );
+				} elseif ( 'weekly' === $type ) {
+					$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $ymd, wp_timezone() );
+					if ( ! $date || $date->format( 'Y-m-d' ) !== $ymd ) {
+						continue;
+					}
+					$offset = ( (int) $date->format( 'w' ) - $start_day + 7 ) % 7;
+					$key = $date->modify( '-' . $offset . ' days' )->format( 'Y-m-d' );
+					$row = array( 'week_start' => $key, 'posts' => 0 );
+				} else {
+					$decade = (int) floor( $year / 10 ) * 10;
+					$key = (string) $decade;
+					$row = array( 'decade' => $decade, 'end_year' => $decade + 9, 'posts' => 0 );
+				}
+				if ( ! isset( $buckets[ $key ] ) ) {
+					$buckets[ $key ] = $row;
+				}
+				++$buckets[ $key ]['posts'];
+			}
+			++$page;
+		} while ( $received === $batch_size );
+
+		if ( 'ASC' === $order ) {
+			ksort( $buckets );
+		} else {
+			krsort( $buckets );
+		}
+		$rows = array_values( $buckets );
+		if ( $limit > 0 ) {
+			$rows = array_slice( $rows, 0, $limit );
+		}
+		$rows = array_map( static function ( $row ) {
+			return (object) $row;
+		}, $rows );
+		if ( $cacheable ) {
+			wp_cache_set( $cache_key, $rows, 'posts' );
+		}
+		return $rows;
 	}
 
 	/**
