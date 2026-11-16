@@ -592,22 +592,50 @@ foreach ( array( "post' OR 1=1 --", array( 'post' ) ) as $unsafe_type ) {
     $assert( 'Unregistered or malformed post type never reaches MariaDB',
         '' === $unsafe_result && 0 === count( $sql_audit_seen ) );
 }
-// A hostile LIMIT/order value is normalized to a bounded, allowlisted SQL
-// statement; the attacker-controlled SQL text never enters the query.
+// absint() historically accepted the numeric prefix of SQL-like strings,
+// e.g. '1 UNION SELECT' became 1. Such values must now fail closed with
+// LIMIT 0, not be mistaken for intentional archive selection. Check all
+// seven modes, including the legacy SQL fallback for post listings.
+foreach ( array( '1 UNION SELECT private_post_title', '2e2', '-3', '3foo', '3.2', '0 OR 1=1' ) as $bad_limit ) {
+    foreach ( array( 'yearly', 'monthly', 'weekly', 'daily', 'decade', 'alpha', 'postbypost' ) as $limit_mode ) {
+        wp_cache_flush();
+        $sql_audit_seen = array();
+        $wpdb->last_error = '';
+        $bad_result = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+            'type' => $limit_mode,
+            'limit' => $bad_limit,
+            'order' => 'DESC; DELETE FROM wp_posts',
+            'echo' => 0,
+        ) );
+        $assert( 'Invalid decimal limit fails closed (' . $limit_mode . '/' . $bad_limit . ')',
+            '' === $bad_result && '' === $wpdb->last_error );
+        if ( ! in_array( $limit_mode, array( 'alpha', 'postbypost' ), true ) ) {
+            $assert( 'Invalid limit never enters SQL (' . $limit_mode . '/' . $bad_limit . ')',
+                1 === count( $sql_audit_seen ) &&
+                false !== strpos( $sql_audit_seen[0], ' LIMIT 0' ) &&
+                false !== strpos( $sql_audit_seen[0], ' DESC ' ) &&
+                false === strpos( $sql_audit_seen[0], 'UNION SELECT' ) &&
+                false === strpos( $sql_audit_seen[0], 'DELETE FROM' ) );
+        }
+    }
+}
+foreach ( array( '0', '000', '' ) as $zero_limit ) {
+    wp_cache_flush();
+    $sql_audit_seen = array();
+    $zero_html = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+        'type' => 'yearly', 'limit' => $zero_limit, 'echo' => 0,
+    ) );
+    $assert( 'Zero/omitted limit remains unlimited (' . $zero_limit . ')',
+        is_string( $zero_html ) && substr_count( $zero_html, '<li>' ) > 3 &&
+        1 === count( $sql_audit_seen ) &&
+        false === strpos( $sql_audit_seen[0], ' LIMIT ' ) );
+}
 wp_cache_flush();
-$sql_audit_seen = array();
-$hostile_limit = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
-    'type' => 'yearly',
-    'limit' => '1 UNION SELECT private_post_title',
-    'order' => 'DESC; DELETE FROM wp_posts',
-    'echo' => 0,
+$two_html = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'limit' => ' 2 ', 'echo' => 0,
 ) );
-$assert( 'Untrusted archive SQL fragments are normalized before query',
-    is_string( $hostile_limit ) && 1 === count( $sql_audit_seen ) &&
-    false !== strpos( $sql_audit_seen[0], ' LIMIT 1' ) &&
-    false !== strpos( $sql_audit_seen[0], ' DESC ' ) &&
-    false === strpos( $sql_audit_seen[0], 'UNION SELECT' ) &&
-    false === strpos( $sql_audit_seen[0], 'DELETE FROM' ) );
+$assert( 'Whitespace around a valid decimal limit is permitted',
+    2 === substr_count( $two_html, '<li>' ) );
 remove_filter( 'query', $sql_audit_filter, 10 );
 
 $assert( 'Unknown post type returns empty entries', false === strpos(
