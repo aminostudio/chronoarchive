@@ -66,6 +66,12 @@ Yes. `[archives]` and `[arcpromat]` are retained. Prefer `[chronoarchive]` for n
 
 No. Both extensions register the `[archives]` and `[arcpromat]` shortcodes, so running them together can produce unpredictable results. Back up your site, check the archived pages and widgets, then deactivate Annual Archive. ChronoArchive displays an administrator-only warning when it detects that both are active. It never disables another plugin automatically.
 
+= Do legacy getarchives_where and getarchives_join PHP filters still change ChronoArchive queries? =
+
+No. ChronoArchive 2.1.0 no longer executes custom SQL fragments from these historic filters. For safety, a callback that changes either SQL fragment causes ChronoArchive to display no results rather than silently discard a potentially important content restriction. No-op callbacks remain compatible.
+
+For customization, migrate to WordPress's supported `posts_where`, `posts_join` or `pre_get_posts` hooks using safe parameterization. Target only ChronoArchive queries by checking `$query->get( 'chronoarchive_origin' )` in your callback. ChronoArchive uses paginated `WP_Query` and groups public, published posts in PHP. On a site with many posts, check performance and object caching before deploying.
+
 = What archive types can I request? =
 
 Use `yearly`, `monthly`, `weekly`, `daily`, `decade`, `alpha` or `postbypost` in the `type` attribute.
@@ -90,6 +96,7 @@ Amino Studio develops and maintains ChronoArchive. The project repository contai
 * Shortcode `[chronoarchive]`, compatibility aliases `[archives]` and `[arcpromat]`, and classic widget.
 * Configurable defaults, administration dashboard, shortcode builder, CSS controls and public custom post types.
 * Input validation, late escaping, archive link navigation and compatibility improvements.
+* Moved grouped archives to native paginated WP_Query, replacing raw SQL aggregation. Custom legacy SQL-fragment filters now fail closed if they modify query fragments; migrate to scoped WordPress post query hooks.
 * Verified reproducible WordPress.org ZIP packaging and real WordPress/PHP/browser test coverage.
 
 = 2.1.0-beta3 =
@@ -129,7 +136,7 @@ Amino Studio develops and maintains ChronoArchive. The project repository contai
 
 = 2.1.0 =
 
-Back up your site, install the update, then verify archive links, custom post types and any previous widget or shortcode settings. Do not keep Annual Archive active alongside ChronoArchive because their legacy shortcode aliases overlap.
+Back up your site, then verify archive links, custom post types and widgets. Migrate custom getarchives_where/getarchives_join SQL callbacks to scoped native WordPress post query hooks: altered historical SQL fragments now fail closed. Do not keep Annual Archive active alongside ChronoArchive because their shortcode aliases overlap.
 
 = 2.1.0-beta3 =
 
