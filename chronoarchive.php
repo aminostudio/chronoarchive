@@ -86,6 +86,7 @@ class WP_Plugin_ChronoArchive {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
 		add_action( 'plugin_action_links_' . plugin_basename(__FILE__), array( $this, 'plugin_actions' ) );
 		add_action( 'admin_init', array( $this, 'admin_init' ) );
+		add_action( 'admin_notices', array( $this, 'legacy_plugin_conflict_notice' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'archive_admin_js_scripts' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'plugin_enqueue_styles' ) );
 
@@ -258,6 +259,38 @@ class WP_Plugin_ChronoArchive {
 				array( $this, 'options_page' )
 			);
 		}
+	}
+
+	/**
+	 * Warn site administrators when the vulnerable predecessor is still active.
+	 *
+	 * Annual Archive and ChronoArchive register the same historical shortcode
+	 * aliases. Running both makes shortcode ownership depend on plugin load
+	 * order and leaves the closed upstream plugin on the site. Never disable or
+	 * alter another plugin automatically: the site owner must review the change.
+	 */
+	function legacy_plugin_conflict_notice() {
+		if ( ! current_user_can( 'activate_plugins' ) ) {
+			return;
+		}
+
+		$legacy_basename = 'anual-archive/annual_archive.php';
+		$active = get_option( 'active_plugins', array() );
+		$legacy_active = is_array( $active ) && in_array( $legacy_basename, $active, true );
+		if ( is_multisite() ) {
+			$network_active = get_site_option( 'active_sitewide_plugins', array() );
+			$legacy_active = $legacy_active || ( is_array( $network_active ) && isset( $network_active[ $legacy_basename ] ) );
+		}
+		if ( ! $legacy_active ) {
+			return;
+		}
+
+		echo '<div class="notice notice-warning"><p>';
+		esc_html_e(
+			'ChronoArchive: Annual Archive is also active. Both plugins use the [archives] and [arcpromat] shortcodes, which can conflict. Check your existing archive pages, then deactivate Annual Archive to complete the migration safely.',
+			'chronoarchive'
+		);
+		echo '</p></div>';
 	}
 
 	/**
