@@ -136,7 +136,7 @@ Amino Studio develops and maintains ChronoArchive. The project repository contai
 
 = 2.1.0 =
 
-Back up your site, then verify archive links, custom post types and widgets. Migrate custom getarchives_where/getarchives_join SQL callbacks to scoped native WordPress post query hooks: altered historical SQL fragments now fail closed. Do not keep Annual Archive active alongside ChronoArchive because their shortcode aliases overlap.
+Back up your site and verify archives, custom post types and widgets. Legacy getarchives_where/getarchives_join SQL filters must migrate to scoped posts_where/posts_join or pre_get_posts filters; altered SQL fragments now fail closed. Deactivate Annual Archive to avoid shortcode collisions.
 
 = 2.1.0-beta3 =
 
