@@ -134,6 +134,17 @@ Update ChronoArchive after backing up your site.
         (root / "readme.txt").write_text(bad_readme, encoding="utf-8")
         run(root, "scripts/check-release-metadata.py", "--release", success=False)
 
+        # WordPress.org imposes a 300-character Upgrade Notice limit.
+        # This is an actual directory scanner warning, not style preference.
+        (root / "readme.txt").write_text(
+            readme.replace(
+                "Update ChronoArchive after backing up your site.",
+                "Upgrade notice " + ("x" * 320),
+            ),
+            encoding="utf-8",
+        )
+        run(root, "scripts/check-release-metadata.py", "--release", success=False)
+
         # Restore a clean readme, then prove matching beta metadata cannot
         # pass either of the two stable-only validation/build commands.
         beta = stable + "-beta99"
