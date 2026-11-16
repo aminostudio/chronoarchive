@@ -75,8 +75,10 @@ The plugin source is `chronoarchive.php`. The relevant routines are
 | --- | --- | --- |
 | `post_type` shortcode/widget/direct API argument | `sanitize_key`, registered `get_post_type_object`, `is_post_type_viewable`, then bound with WordPress `$wpdb->prepare(... %s)` | Other installed PHP filters can replace the predicate |
 | Query type | Seven explicitly supported modes, invalid input defaults safely | Legacy PHP filters can modify the final clauses |
-| Limit | Non-negative integer via `absint`, normalized `LIMIT n`; unparseable nonempty value fails closed at zero | An installed PHP SQL callback may itself generate an unsafe limit |
+| Limit | Strict ASCII-decimal validation before `absint`; malformed nonempty input such as `1 UNION SELECT`, `2e2` or `-3` now fails closed as `LIMIT 0`, while zero/omitted remains unlimited | An installed PHP SQL callback may itself generate an unsafe limit |
 | Sort directions | Exact `ASC` / `DESC` allowlists | Filter-provided SQL remains outside this allowlist |
+
+**New security regression (16 November 2026):** WordPress's `absint()` accepts a numeric prefix such as `1 UNION SELECT ...` as integer `1`, so the former numeric-only conversion did not actually reject invalid text. The fork now requires an entire ASCII decimal string before integer conversion; malformed nonempty values are forced to a SQL `LIMIT 0`. This is **input-validation hardening**, not evidence that the old code was SQL-injectable. Tests exercise the seven archive modes and check that malicious text never enters grouped SQL, while `0`, `000` and omitted values remain unlimited. The official scanner's 2 SQL errors and 1 direct-query warning remain unaffected by this change.
 | `getarchives_where` / `getarchives_join` | Callback return type must be string, WHERE nonempty, embedded NUL rejected; no public caller can register a PHP callback | **Trusted installed PHP code returns raw SQL**. If that code interpolates visitor input without preparing its values, ChronoArchive cannot prove the resulting SQL safe |
 | SQL execution | One centralized `get_results()` on cache miss, key derived from SQL and WordPress `posts:last_changed` | Static checker cannot follow an assembled `$query` variable; direct query remains by design |
 
