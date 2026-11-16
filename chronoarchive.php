@@ -578,50 +578,29 @@ class WP_Plugin_ChronoArchive {
 		// Separator for weekly archives.
 		$archive_week_separator = '&#8211;';
 
+		// Maintain the historic hook interface without EVER executing its SQL.
+		// A callback that changes the SQL must migrate to WordPress's native
+		// posts_where/posts_join hooks. Otherwise silently ignoring a custom
+		// restriction could broaden a public archive's visible content.
 		$sql_where = $wpdb->prepare( "WHERE post_type = %s AND post_status = 'publish'", $r['post_type'] );
-
-		$where = apply_filters( 'getarchives_where', $sql_where, $r );
-		$join  = apply_filters( 'getarchives_join', '', $r );
-
-		// Preserve the legacy SQL-fragment hook contract for trusted plugin
-		// callbacks. Malformed filter return values must never be coerced into
-		// SQL or trigger a fatal error in a public shortcode.
-		// SQL fragments from PHP callbacks are *not* user-input parameters:
-		// wpdb::prepare() cannot quote a JOIN or WHERE clause as a value.
-		// Code registering these filters remains responsible for its own
-		// SQL parameterization. Fail closed when the contract is violated.
-		if (
-			! is_string( $where ) ||
-			! is_string( $join ) ||
-			'' === trim( $where ) ||
-			false !== strpos( $where, "\0" ) ||
-			false !== strpos( $join, "\0" )
-		) {
+		$legacy_where = apply_filters( 'getarchives_where', $sql_where, $r );
+		$legacy_join = apply_filters( 'getarchives_join', '', $r );
+		if ( ! is_string( $legacy_where ) || $legacy_where !== $sql_where ||
+			! is_string( $legacy_join ) || '' !== trim( $legacy_join ) ) {
 			return '';
 		}
 
-		// WordPress core passes this pre-prepared WHERE clause to the legacy
-		// SQL-fragment hooks. Keep their returned SQL intact, including
-		// literal percent signs, prepared LIKE patterns and custom JOINs.
-		// Only installed PHP callbacks can add these SQL fragments.
-
+		// Malformed explicit limits must not fall back to unlimited results.
+		if ( $invalid_listing_limit ) {
+			return '';
+		}
 		$output = '';
-
 		$last_changed = wp_cache_get_last_changed( 'posts' );
-		$limit = $r['limit'];
-
-		// JOIN filters may multiply posts into matching metadata rows. Archive
-		// counts and individual links must represent unique published posts.
-		// Grouped archives must sort on their grouped date buckets, not raw
-		// post_date. The latter is ambiguous and can fail ONLY_FULL_GROUP_BY.
-		// Sort directions are already allowlisted to ASC/DESC above.
-		// The validated post type is prepared in the canonical WHERE clause
-		// before the WordPress hooks run. Trusted PHP filters can supply their
-		// own parameterized JOIN/WHERE fragments as in wp_get_archives().
+		// The archive's buckets now come from paginated WP_Query results.
+		// The only SQL executed is prepared by WordPress core.
 		// Monthly archives.
 		if ( 'monthly' == $r['type'] ) {
-			$query = "SELECT YEAR(post_date) AS `year`, MONTH(post_date) AS `month`, COUNT(DISTINCT $wpdb->posts.ID) AS posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date), MONTH(post_date) ORDER BY `year` $order, `month` $order $limit";
-			$results = self::cached_archive_rows( $query, $last_changed );
+			$results = self::grouped_archive_rows( 'monthly', $r['post_type'], $order, $listing_limit, $last_changed );
 			if ( $results ) {
 				$after = $r['after'];
 				foreach ( (array) $results as $result ) {
@@ -651,8 +630,7 @@ class WP_Plugin_ChronoArchive {
 			}
 		// Yearly archives: grouped SQL and object-cache lookup.
 		} elseif ( 'yearly' == $r['type'] ) {
-			$query = "SELECT YEAR(post_date) AS `year`, COUNT(DISTINCT $wpdb->posts.ID) AS posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date) ORDER BY `year` $order $limit";
-			$results = self::cached_archive_rows( $query, $last_changed );
+			$results = self::grouped_archive_rows( 'yearly', $r['post_type'], $order, $listing_limit, $last_changed );
 			if ( $results ) {
 				$after = $r['after'];
 				foreach ( (array) $results as $result ) {
@@ -678,8 +656,7 @@ class WP_Plugin_ChronoArchive {
 			}
 		// Daily archives: grouped SQL and object-cache lookup.
 		} elseif ( 'daily' == $r['type'] ) {
-			$query = "SELECT YEAR(post_date) AS `year`, MONTH(post_date) AS `month`, DAYOFMONTH(post_date) AS `dayofmonth`, COUNT(DISTINCT $wpdb->posts.ID) AS posts FROM $wpdb->posts $join $where GROUP BY YEAR(post_date), MONTH(post_date), DAYOFMONTH(post_date) ORDER BY `year` $order, `month` $order, `dayofmonth` $order $limit";
-			$results = self::cached_archive_rows( $query, $last_changed );
+			$results = self::grouped_archive_rows( 'daily', $r['post_type'], $order, $listing_limit, $last_changed );
 			if ( $results ) {
 				$after = $r['after'];
 				foreach ( (array) $results as $result ) {
@@ -697,11 +674,9 @@ class WP_Plugin_ChronoArchive {
 			}
 		// Weekly archives: grouped SQL and object-cache lookup.
 		} elseif ( 'weekly' == $r['type'] ) {
-			// start_of_week is a validated WordPress option (0=Sunday ... 6=Saturday).
+			// Grouping and week boundaries are calculated by grouped_archive_rows().
 			$start_day = (int) get_option( 'start_of_week', 1 );
-			$week_start_sql = "DATE_SUB(DATE(post_date), INTERVAL MOD(DAYOFWEEK(post_date) - 1 - $start_day + 7, 7) DAY)";
-			$query = "SELECT DATE_FORMAT($week_start_sql, '%Y-%m-%d') AS week_start, COUNT(DISTINCT $wpdb->posts.ID) AS posts FROM $wpdb->posts $join $where GROUP BY week_start ORDER BY week_start $order $limit";
-			$results = self::cached_archive_rows( $query, $last_changed );
+			$results = self::grouped_archive_rows( 'weekly', $r['post_type'], $order, $listing_limit, $last_changed );
 			if ( $results ) {
 				$after = $r['after'];
 				foreach ( (array) $results as $result ) {
@@ -720,8 +695,7 @@ class WP_Plugin_ChronoArchive {
 			}
 		// Decade archives: grouped SQL and object-cache lookup.
 		} elseif ( 'decade' == $r['type'] ) {
-			$query = "SELECT COUNT(DISTINCT archive_post_id) AS posts, decade, MAX(decade) + 9 AS end_year FROM (SELECT $wpdb->posts.ID AS archive_post_id, FLOOR(YEAR(post_date) / 10) * 10 AS decade FROM $wpdb->posts $join $where) t GROUP BY decade ORDER BY decade $order $limit";
-			$results = self::cached_archive_rows( $query, $last_changed );
+			$results = self::grouped_archive_rows( 'decade', $r['post_type'], $order, $listing_limit, $last_changed );
 			if ( $results ) {
 				$after = $r['after'];
 				foreach ( (array) $results as $result ) {
@@ -746,36 +720,24 @@ class WP_Plugin_ChronoArchive {
 			if ( $post_order !== 'DESC' ) {
 				$post_order = 'ASC';
 			}
-			// Use WordPress's structured query API when there are no SQL
-			// archive hooks. It handles native post queries and their cache,
-			// rather than interpolating SQL for ordinary public listings.
-			// Callbacks on either legacy SQL hook retain their original
-			// behavior and use the specialized query below.
-			if ( ! $invalid_listing_limit && ! has_filter( 'getarchives_where' ) && ! has_filter( 'getarchives_join' ) ) {
-				$query_args = array(
-					'post_type'              => $r['post_type'],
-					'post_status'            => 'publish',
-					'posts_per_page'         => $listing_limit > 0 ? $listing_limit : -1,
-					'ignore_sticky_posts'    => true,
-					'no_found_rows'          => true,
-					'cache_results'          => true,
-					'update_post_meta_cache' => false,
-					'update_post_term_cache' => false,
-					// Keep normal WP_Query filters enabled, as expected
-					// by WordPress plugins and the Plugin Check VIP rules.
-					'orderby'                => 'alpha' === $r['type']
-						? 'title' : array( 'date' => $post_order, 'ID' => 'DESC' ),
-					'order'                  => $alpha_order,
-				);
-				$native_query = new WP_Query( $query_args );
-				$results = $native_query->posts;
-			} else {
-				$orderby = ( 'alpha' == $r['type'] )
-					? 'post_title ' . $alpha_order
-					: 'post_date ' . $post_order . ', ID DESC';
-				$query = "SELECT DISTINCT $wpdb->posts.ID AS ID, post_title, post_date FROM $wpdb->posts $join $where ORDER BY $orderby $limit";
-				$results = self::cached_archive_rows( $query, $last_changed );
-			}
+			// Structured WP_Query is the sole listing engine, independent of
+			// whether the old archive SQL hooks have no-op callbacks.
+			$query_args = array(
+				'post_type'              => $r['post_type'],
+				'post_status'            => 'publish',
+				'posts_per_page'         => $listing_limit > 0 ? $listing_limit : -1,
+				'ignore_sticky_posts'    => true,
+				'no_found_rows'          => true,
+				'cache_results'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+				'suppress_filters'       => false,
+				'orderby'                => 'alpha' === $r['type']
+					? 'title' : array( 'date' => $post_order, 'ID' => 'DESC' ),
+				'order'                  => $alpha_order,
+			);
+			$native_query = new WP_Query( $query_args );
+			$results = $native_query->posts;
 			if ( $results ) {
 				foreach ( (array) $results as $result ) {
 					if ( $result->post_date != '0000-00-00 00:00:00' ) {
