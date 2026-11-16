@@ -17,6 +17,12 @@ expected = [
 known, additional = evaluate({"chronoarchive.php": expected})
 assert len(known) == 3 and not additional, "Known SQL baseline not recognized"
 assert evaluate({}) == ([], []), "Clean scanner output must pass"
+assert evaluate({"chronoarchive.php": expected}, stable_release=True)[1], (
+    "Stable release must not waive historical SQL errors or warning"
+)
+assert evaluate({}, stable_release=True) == ([], []), (
+    "Clean stable report must pass"
+)
 assert evaluate({"chronoarchive.php": expected + [
     {"type": "ERROR", "code": "Unrelated.NewInjection"}
 ]})[1], "New SQL finding must fail"
@@ -39,7 +45,15 @@ assert parse_report('{"chronoarchive.php":' + json.dumps(expected) + '}') == {
     "chronoarchive.php": expected
 }, "Plain JSON output must still parse"
 assert parse_report("") == {}, "Empty clean scanner output must be accepted"
-for malformed in ("FILE: chronoarchive.php\nnot JSON\n", "Some error output", "FILE:"):
+assert parse_report("Success: Checks complete. No errors found.\n") == {}, (
+    "Official scanner success text must parse as an empty report"
+)
+for malformed in (
+    "FILE: chronoarchive.php\nnot JSON\n",
+    "Some error output",
+    "FILE:",
+    "Success: Checks complete. No errors found.\nFILE: chronoarchive.php\n[]",
+):
     try:
         parse_report(malformed)
     except ValueError:
