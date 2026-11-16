@@ -148,6 +148,33 @@ foreach ( array( 'archives', 'arcpromat', 'chronoarchive' ) as $alias ) {
         false !== strpos( $html_variant, '<a ' ) );
 }
 
+// All shortcode aliases must reject a malformed numeric LIMIT *before*
+// absint() can accept a numeric prefix. Test the default markup path as
+// well as the dropdown path, and confirm no grouped SQL is executed.
+foreach ( array( 'archives', 'arcpromat', 'chronoarchive' ) as $limit_alias ) {
+    foreach ( array( 'yearly', 'monthly', 'weekly', 'daily', 'decade', 'alpha', 'postbypost' ) as $limit_mode ) {
+        foreach ( array( '1 UNION SELECT', '2e2', '-3', '3.4' ) as $bad_limit ) {
+            $queries_before_invalid = $wpdb->num_queries;
+            $bad_shortcode = '[' . $limit_alias . ' type="' . $limit_mode .
+                '" limit="' . $bad_limit . '"]';
+            $invalid_shortcode_html = do_shortcode( $bad_shortcode );
+            $assert( 'Invalid shortcode limit rejects all content (' . $limit_alias . '/' . $limit_mode . '/' . $bad_limit . ')',
+                '' === $invalid_shortcode_html &&
+                $queries_before_invalid === $wpdb->num_queries );
+        }
+    }
+    $queries_before_dropdown = $wpdb->num_queries;
+    $invalid_dropdown = do_shortcode(
+        '[' . $limit_alias . ' type="monthly" format="option" limit="1 UNION SELECT"]'
+    );
+    $assert( 'Invalid dropdown shortcode never renders or queries (' . $limit_alias . ')',
+        '' === $invalid_dropdown &&
+        $queries_before_dropdown === $wpdb->num_queries );
+    $valid_shortcode = do_shortcode( '[' . $limit_alias . ' type="yearly" limit="2"]' );
+    $assert( 'Decimal-only shortcode still returns two years (' . $limit_alias . ')',
+        2 === substr_count( $valid_shortcode, '<li>' ) );
+}
+
 // The named shortcode_atts_archives hook may return malformed values.
 // This is a typed-input resilience test using real WordPress functions.
 $malformed_shortcode_filter = static function ( $attributes ) {
