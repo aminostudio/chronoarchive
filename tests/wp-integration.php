@@ -797,6 +797,27 @@ $bad_instance = array( 'title' => array( 'bad' ), 'before' => array( 'bad' ),
 $normalized = $widget->update( $bad_instance, array() );
 $assert( 'Widget update rejects non-scalar fields', '' === $normalized['title'] &&
     'yearly' === $normalized['type'] && 'html' === $normalized['format'] );
+
+foreach ( array( '3 UNION SELECT private_data', '-2', '3e2', '2.5', '7 OR 1=1' ) as $bad_widget_limit ) {
+    $invalid_widget_settings = $widget->update( array( 'type' => 'yearly', 'limit' => $bad_widget_limit ), array() );
+    $assert( 'Classic widget rejects invalid limit before saving (' . $bad_widget_limit . ')',
+        '' === $invalid_widget_settings['limit'] );
+}
+foreach ( array( '2' => 2, ' 4 ' => 4, '000' => 0 ) as $valid_widget_limit => $expected_widget_limit ) {
+    $valid_widget_settings = $widget->update( array( 'type' => 'yearly', 'limit' => (string) $valid_widget_limit ), array() );
+    $assert( 'Classic widget retains numeric limit (' . $valid_widget_limit . ')',
+        (int) $valid_widget_settings['limit'] === $expected_widget_limit );
+}
+// A malicious limit in a *pre-upgrade stored widget* does not go through
+// update(). Runtime must fail closed instead of rendering an unbounded list.
+ob_start();
+$widget->widget( array( 'before_widget' => '<aside>', 'after_widget' => '</aside>' ),
+    array( 'type' => 'yearly', 'limit' => '3 UNION SELECT private_data' ) );
+$malformed_stored_widget = ob_get_clean();
+$assert( 'Historic widget invalid limit does not expose archive links',
+    false !== strpos( $malformed_stored_widget, '<aside>' ) &&
+    false === strpos( $malformed_stored_widget, '<a ' ) );
+
 ob_start();
 $widget->form( $bad_instance );
 $form = ob_get_clean();
