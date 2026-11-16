@@ -429,12 +429,15 @@ class WP_Plugin_ChronoArchive {
 			$r['type'] = 'yearly';
 		}
 
-		// A zero/omitted limit means unlimited. Never append a bare "0"
-		// after ORDER BY: the legacy path produced invalid SQL for limit=0.
-		// Invalid nonempty values preserve a fail-closed SQL LIMIT 0.
-		$limit_present = ! empty( $r['limit'] );
-		$listing_limit = $limit_present ? absint( $r['limit'] ) : 0;
-		$invalid_listing_limit = $limit_present && 0 === $listing_limit;
+		// Only a string of ASCII decimal digits is a valid limit.
+		// absint( '1 UNION SELECT ...' ) returns 1, silently accepting the
+		// numeric prefix of hostile input. Fail closed with LIMIT 0 instead.
+		// An omitted value or any spelling of zero remains unlimited.
+		$limit_raw = trim( (string) $r['limit'] );
+		$limit_decimal = '' !== $limit_raw && 1 === preg_match( '/^[0-9]+$/D', $limit_raw );
+		$listing_limit = $limit_decimal ? absint( $limit_raw ) : 0;
+		$invalid_listing_limit = '' !== $limit_raw && ! $limit_decimal;
+		$limit_present = $invalid_listing_limit || $listing_limit > 0;
 		$r['limit'] = $limit_present ? ' LIMIT ' . $listing_limit : '';
 
 		$order = strtoupper( $r['order'] );
