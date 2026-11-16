@@ -156,6 +156,17 @@ ca_assert( 'Invalid HTML attribute stripped', false === strpos( $yearly, 'onclic
 ca_assert( 'Yearly fallback renders', false !== strpos( $yearly, '2026' ) );
 ca_assert( 'Bad sort falls back to DESC', false !== strpos( $GLOBALS['ca_fake_query'], 'ORDER BY `year` DESC' ) );
 ca_assert( 'Bad limit is ignored', false === strpos( $GLOBALS['ca_fake_query'], 'LIMIT' ) );
+WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'limit' => '5 UNION SELECT private_posts', 'echo' => 0,
+) );
+ca_assert( 'Numeric prefix of malicious limit cannot be accepted',
+    false !== strpos( $GLOBALS['ca_fake_query'], ' LIMIT 0' ) &&
+    false === strpos( $GLOBALS['ca_fake_query'], 'UNION SELECT' ) );
+WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'limit' => '000', 'echo' => 0,
+) );
+ca_assert( 'All-zero limit is still unlimited',
+    false === strpos( $GLOBALS['ca_fake_query'], ' LIMIT ' ) );
 
 $GLOBALS['ca_mock_filters']['widget_title'] = array( 'not a scalar' );
 $widget = new ChronoArchive_Widget();
