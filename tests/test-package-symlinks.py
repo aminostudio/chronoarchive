@@ -42,7 +42,7 @@ def run_fixture(relative_script: str, manifest_name: str, entrypoint: str) -> No
             php = php_path.read_text(encoding="utf-8")
             php = re.sub(r"(?m)^Version: .+$", "Version: " + expected, php, count=1)
             php = re.sub(
-                r"(?m)^(\\s*const\\s+VERSION\\s*=\\s*')[^']+(';)$",
+                r"(?m)^(\s*const\s+VERSION\s*=\s*')[^']+(';)$",
                 lambda m: m.group(1) + expected + m.group(2),
                 php, count=1,
             )
