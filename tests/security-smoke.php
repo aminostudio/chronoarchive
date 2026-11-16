@@ -10,7 +10,8 @@ define( 'ABSPATH', '/' );
 
 $GLOBALS['ca_mock_filters'] = array();
 $GLOBALS['ca_mock_options'] = array();
-$GLOBALS['ca_fake_query'] = '';
+$GLOBALS['ca_fake_query_args'] = array();
+$GLOBALS['ca_fake_query_count'] = 0;
 $GLOBALS['ca_mock_multisite'] = false;
 $GLOBALS['ca_mock_edit_css'] = true;
 
@@ -33,6 +34,21 @@ class CA_Fake_Query {
         return isset( $this->values[ $key ] ) ? $this->values[ $key ] : null;
     }
     public function set( $key, $value ) { $this->values[ $key ] = $value; }
+}
+class WP_Post {
+    public $ID = 2026;
+    public $post_date = '2026-01-02 12:00:00';
+    public $post_title = 'Safe fixture';
+}
+class WP_Query {
+    public $posts = array();
+    public function __construct( $args = array() ) {
+        $GLOBALS['ca_fake_query_args'] = $args;
+        ++$GLOBALS['ca_fake_query_count'];
+        if ( ! isset( $args['paged'] ) || 1 === (int) $args['paged'] ) {
+            $this->posts = array( new WP_Post() );
+        }
+    }
 }
 class CA_Fake_DB {
     public $posts = 'wp_posts';
@@ -113,6 +129,9 @@ function absint( $n ) { return abs( (int) $n ); }
 function wp_cache_get_last_changed( $group ) { return 'mock'; }
 function wp_cache_get( $key, $group ) { return false; }
 function wp_cache_set( $key, $value, $group ) {}
+function wp_timezone() { return new DateTimeZone( 'UTC' ); }
+function get_current_user_id() { return 0; }
+function has_filter( $name ) { return array_key_exists( $name, $GLOBALS['ca_mock_filters'] ); }
 function get_year_link( $year ) { return 'https://example.test/' . (int) $year . '/'; }
 function get_archives_link( $url, $text, $format, $before = '', $after = '' ) {
     return apply_filters( 'get_archives_link', '<li>' . $before .
@@ -154,19 +173,20 @@ $yearly = WP_Plugin_ChronoArchive::wp_get_archives_advanced(
 ca_assert( 'Malformed direct arguments do not throw', is_string( $yearly ) );
 ca_assert( 'Invalid HTML attribute stripped', false === strpos( $yearly, 'onclick=' ) );
 ca_assert( 'Yearly fallback renders', false !== strpos( $yearly, '2026' ) );
-ca_assert( 'Bad sort falls back to DESC', false !== strpos( $GLOBALS['ca_fake_query'], 'ORDER BY `year` DESC' ) );
-ca_assert( 'Bad limit is ignored', false === strpos( $GLOBALS['ca_fake_query'], 'LIMIT' ) );
-WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
-    'type' => 'yearly', 'limit' => '5 UNION SELECT private_posts', 'echo' => 0,
-) );
-ca_assert( 'Numeric prefix of malicious limit cannot be accepted',
-    false !== strpos( $GLOBALS['ca_fake_query'], ' LIMIT 0' ) &&
-    false === strpos( $GLOBALS['ca_fake_query'], 'UNION SELECT' ) );
+ca_assert( 'Bad sort still displays valid native archive', false !== strpos( $yearly, '2026' ) );
+ca_assert( 'Invalid numeric limit does not execute a query',
+    ( function () {
+        $before = $GLOBALS['ca_fake_query_count'];
+        $html = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+            'type' => 'yearly', 'limit' => '5 UNION SELECT private_posts', 'echo' => 0,
+        ) );
+        return '' === $html && $before === $GLOBALS['ca_fake_query_count'];
+    } )() );
 WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
     'type' => 'yearly', 'limit' => '000', 'echo' => 0,
 ) );
-ca_assert( 'All-zero limit is still unlimited',
-    false === strpos( $GLOBALS['ca_fake_query'], ' LIMIT ' ) );
+ca_assert( 'All-zero limit remains unlimited through native WP_Query',
+    250 === $GLOBALS['ca_fake_query_args']['posts_per_page'] );
 
 $GLOBALS['ca_mock_filters']['widget_title'] = array( 'not a scalar' );
 $widget = new ChronoArchive_Widget();
