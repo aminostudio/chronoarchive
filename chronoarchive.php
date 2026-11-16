@@ -3,7 +3,7 @@
 Plugin Name: ChronoArchive
 Plugin URI: https://github.com/aminostudio/chronoarchive
 Description: Create daily, weekly, monthly, yearly, decade and alphabetical archives using a shortcode or classic widget.
-Version: 2.1.0-beta3
+Version: 2.1.0
 Requires at least: 6.5
 Requires PHP: 7.2
 Author: Amino Studio
@@ -32,7 +32,7 @@ class WP_Plugin_ChronoArchive {
 	 */
 	// One version constant for all plugin entry points and frontend assets.
 	// The header and WordPress.org readme are verified against it in CI.
-	const VERSION = '2.1.0-beta3';
+	const VERSION = '2.1.0';
 
 	var $plugin_name = 'ChronoArchive';
 	var $version = self::VERSION;
