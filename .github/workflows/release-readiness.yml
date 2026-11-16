@@ -18,7 +18,12 @@ concurrency:
 jobs:
   release-metadata:
     name: Validate WordPress.org metadata
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # A draft release/* PR may verify stable packaging without merging,
+    # tagging or representing the build as accepted for distribution.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false ||
+      startsWith(github.head_ref, 'release/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
