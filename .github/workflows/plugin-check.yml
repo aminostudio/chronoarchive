@@ -1,0 +1,37 @@
+name: WordPress Plugin Check
+
+# Run the official scanner on every PR, including drafts, for early feedback.
+# Draft PR findings are advisory; non-draft PRs, main and tags stay blocking.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chrono-plugin-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plugin-check:
+    name: Official Plugin Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Plugin Check runs its own isolated WordPress wp-env installation.
+      # Draft PRs receive complete scanner output without blocking iteration.
+      # Once marked ready for review (or on main/tags), findings fail CI.
+      # No sniff exclusions or scanner ignore codes are introduced.
+      - name: Run official WordPress Plugin Check
+        continue-on-error: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == true }}
+        uses: wordpress/plugin-check-action@v1
+        with:
+          build-dir: './'
+          slug: chronoarchive
+          exclude-directories: 'tests,docs,scripts,.github'
+          exclude-files: '.gitignore,.gitattributes,.github/workflows/wordpress-integration.yml,.github/workflows/static-checks.yml'

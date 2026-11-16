@@ -1,10 +1,17 @@
 name: Static checks
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
+
+# All draft PRs must still run real syntax and unit tests, while release
+# metadata is enforced separately at the review/release boundary.
+concurrency:
+  group: chrono-static-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   php-lint:
@@ -26,6 +33,8 @@ jobs:
         run: |
           test -f chronoarchive.php || exit 1
           find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+      - name: Mock security regression tests
+        run: php tests/security-smoke.php
 
   javascript-syntax:
     runs-on: ubuntu-latest
@@ -40,10 +49,45 @@ jobs:
           test -f chronoarchive.php || exit 1
           find assets js -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
 
-  release-metadata:
-    name: WordPress.org metadata (intentionally blocked on LAB beta)
+  metadata-schema:
+    name: Plugin/readme metadata consistency (development)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check WordPress release metadata
+      - name: Validate metadata schema and i18n domain
         run: python3 scripts/check-release-metadata.py
+      - name: Verify Plugin Check advisory guard
+        run: |
+          python3 -m py_compile scripts/verify-pcp-findings.py tests/test-pcp-findings.py
+          python3 tests/test-pcp-findings.py
+      - name: Prove the future stable packaging gate works on a disposable fixture
+        run: python3 tests/test-stable-release-gate.py
+      - name: Reject symbolic-link directories in all plugin ZIPs
+        run: python3 tests/test-package-symlinks.py
+      - name: Validate package and release gate for this version
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Stable releases must be buildable. Prerelease metadata must
+          # never be accepted by either of the stable-only commands.
+          if grep -Eq '^Version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$' chronoarchive.php; then
+            python3 scripts/check-release-metadata.py --release
+            python3 scripts/build-wporg-zip.py --release --output "$RUNNER_TEMP/chronoarchive-a.zip"
+            python3 scripts/build-wporg-zip.py --release --output "$RUNNER_TEMP/chronoarchive-b.zip"
+            echo "PASS: stable metadata and package checks"
+          else
+            if python3 scripts/check-release-metadata.py --release; then
+              echo "::error::Prerelease unexpectedly passed the stable metadata gate"
+              exit 1
+            fi
+            if python3 scripts/build-wporg-zip.py --release --output "$RUNNER_TEMP/forbidden-stable.zip"; then
+              echo "::error::Prerelease unexpectedly passed the stable ZIP gate"
+              exit 1
+            fi
+            test ! -e "$RUNNER_TEMP/forbidden-stable.zip"
+            python3 scripts/build-lab-zip.py --output "$RUNNER_TEMP/chronoarchive-a.zip"
+            python3 scripts/build-lab-zip.py --output "$RUNNER_TEMP/chronoarchive-b.zip"
+            echo "PASS: prerelease stable gates blocked, LAB package valid"
+          fi
+          cmp "$RUNNER_TEMP/chronoarchive-a.zip" "$RUNNER_TEMP/chronoarchive-b.zip"
+          unzip -t "$RUNNER_TEMP/chronoarchive-a.zip"

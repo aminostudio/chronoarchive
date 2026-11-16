@@ -1,0 +1,64 @@
+name: Official Plugin Check on WordPress.org QA ZIP
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chrono-dist-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  distribution-plugin-check:
+    name: WordPress Plugin Check · packaged lowercase candidate
+    # Scan exact ZIP for the consolidated review even while it is a draft.
+    # Diagnostic in draft; mandatory when marked ready for review.
+    # All ready PRs, main and version tags must scan the EXACT distribution.
+    # Draft QA runs only for the consolidated integration branch family.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false ||
+      startsWith(github.head_ref, 'integration/') ||
+      github.event.pull_request.base.ref == 'develop/import-lab-beta1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild and extract exact lowercase candidate ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A reviewed PR or tag MUST contain stable metadata; drafts may
+          # produce a prerelease ZIP for diagnostic scanning only.
+          args=()
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]] || [[ '${{ github.event.pull_request.draft }}' == 'false' ]]; then
+            args+=(--release)
+          fi
+          python3 scripts/check-release-metadata.py
+          python3 scripts/build-wporg-zip.py "${args[@]}" --output dist/chronoarchive-exact-candidate.zip
+          mkdir -p dist/plugin-check-input
+          unzip -q dist/chronoarchive-exact-candidate.zip -d dist/plugin-check-input
+          test -f dist/plugin-check-input/chronoarchive/chronoarchive.php
+          test -f dist/plugin-check-input/chronoarchive/readme.txt
+      - name: Run official Plugin Check on extracted distribution, no ignores
+        continue-on-error: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == true }}
+        uses: wordpress/plugin-check-action@v1
+        with:
+          build-dir: './dist/plugin-check-input/chronoarchive'
+          slug: chronoarchive
+          # Do not suppress SQL findings, plugin_repo checks or warnings.
+          # QA candidate is a beta; this is NOT a WordPress.org submission.
+      # The official scanner writes real JSON even when its action exits 1.
+      # Drafts are advisory only for the *known* SQL baseline: unknown errors
+      # and warnings cause this additional step to fail the development CI.
+      # On non-draft PRs the official scanner above remains fully blocking.
+      - name: Fail draft CI if new Plugin Check violations appear
+        if: ${{ always() }}
+        shell: bash
+        run: python3 scripts/verify-pcp-findings.py "$RUNNER_TEMP/plugin-check-results.txt"

@@ -1,0 +1,83 @@
+name: Multisite security
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chrono-multisite-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+
+jobs:
+  network-capabilities:
+    name: Network permissions · WP ${{ matrix.wp }} / PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { php: '7.2', wp: '6.5.5' }
+          - { php: '8.4', wp: 'latest' }
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: chrono-test-only-root
+          MARIADB_DATABASE: chrono_multisite_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -u root -pchrono-test-only-root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mysqli, mbstring, zip
+          coverage: none
+      - name: Set up disposable WordPress multisite
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --retry 3 \
+            https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
+            --output /tmp/wp-cli.phar
+          core_args=()
+          if [[ '${{ matrix.wp }}' != 'latest' ]]; then
+            core_args+=(--version='${{ matrix.wp }}')
+          fi
+          php /tmp/wp-cli.phar core download --path=/tmp/chrono-network --skip-content "${core_args[@]}"
+          php /tmp/wp-cli.phar config create \
+            --path=/tmp/chrono-network \
+            --dbname=chrono_multisite_ci \
+            --dbuser=root \
+            --dbpass=chrono-test-only-root \
+            --dbhost=127.0.0.1:3306
+          php /tmp/wp-cli.phar core multisite-install \
+            --path=/tmp/chrono-network \
+            --url=http://localhost:8095 \
+            --title=chronoarchive-multisite-ci \
+            --admin_user=ci_network_admin \
+            --admin_password=ci-only-unsafe-to-reuse \
+            --admin_email=ci@example.test \
+            --skip-email
+          php /tmp/wp-cli.phar site create --path=/tmp/chrono-network \
+            --slug=archive --title=ChronoArchive-QA --email=ci@example.test
+          mkdir -p /tmp/chrono-network/wp-content/plugins/chronoarchive
+          cp chronoarchive.php readme.txt /tmp/chrono-network/wp-content/plugins/chronoarchive/
+          cp -R assets js tests /tmp/chrono-network/wp-content/plugins/chronoarchive/
+          php /tmp/wp-cli.phar plugin activate chronoarchive --network --path=/tmp/chrono-network
+      - name: Exercise real network and subsite capabilities
+        shell: bash
+        run: |
+          set -euo pipefail
+          php /tmp/wp-cli.phar eval-file \
+            /tmp/chrono-network/wp-content/plugins/chronoarchive/tests/multisite-security.php \
+            --path=/tmp/chrono-network

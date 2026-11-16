@@ -1,38 +1,42 @@
 # ChronoArchive release gates
 
-**Baseline:** `2.1.0-beta1`. **Release status: BLOCKED.** No stable tag, WordPress.org submission or production recommendation.
+**Last reviewed:** 16 November 2026. **Development candidate:** `2.1.0-beta3`. **Stable release:** NOT YET APPROVED. **Consolidated source:** [draft PR #28](https://github.com/aminostudio/chronoarchive/pull/28). The repository's public `main` is intentionally still a landing page, not a published plugin.
 
-## P0 blockers
+## Verified work completed
 
-- [x] Import the four LAB source files on a dedicated branch and preserve the original beta baseline.
-- [ ] Verify the source against a byte-exact source export/checksum. WPVibe read-only source retrieval masks recognized secret patterns; the retrieved four files had no redaction tokens, but byte-level equality has not been independently established.
-- [ ] Investigate the historical Annual Archive XSS advisories (`CVE-2023-0178`, `CVE-2024-33598`) and test the fork's actual affected paths.
-- [ ] Audit all shortcode and widget arguments, HTML output, SQL, custom CSS and archive URLs. Patch defects with regression tests.
-- [ ] Correct plugin headers (`Requires at least`, `Requires PHP`, `License URI`, `Text Domain`) and replace the old WordPress.org `readme.txt` structure.
-- [ ] Replace obsolete Annual Archive support/reviews/promotional URLs in the administration page; preserve upstream attribution.
-- [ ] Execute WordPress Plugin Check (general + plugin repository checks) on the final ZIP and triage findings.
-- [ ] Verify actual frontend archive navigation with Under Construction bypass **only for authorized testing**; preserve protection for normal visitors.
-- [ ] Test PHP 7.2, 8.2 and 8.4 and the oldest claimed WordPress version with shortcodes, widgets, blocks and CPTs.
-- [ ] Review compatibility and performance on a larger data set, SQL grouping / `ONLY_FULL_GROUP_BY` and cache invalidation.
-- [ ] Validate build root, installable ZIP, license attribution, translations, readme and rollback procedure.
-- [ ] Review passing CI results; create final signed-off tag and release only after all critical checks are green.
+- [x] Main plugin headers and WordPress.org readme use the lowercase `chronoarchive` text domain and consistent minimum requirements.
+- [x] Code-level hardening: input normalization, output escaping, capability-checked CSS, safe archive URLs, shortcode and widget protection.
+- [x] Five grouped date queries run through one cache-aware database sink; ordinary `alpha` and `postbypost` listing paths use `WP_Query` unless registered legacy SQL hooks require the original query contract.
+- [x] WordPress/PHP matrix: four integration jobs, **at least 430 passing assertions per environment**, MariaDB grouped SQL, cached empty/failure behavior, CPTs and legacy aliases. Verified [CI #43785264044](https://github.com/aminostudio/chronoarchive/actions/runs/43785264044), 1,720 PHP assertions total. An additional widget-limit security test matrix is being evaluated in the current PR.
+- [x] Real Chromium tests on a **disposable localhost WordPress site**: plain and pretty permalink archive navigation, external URL rejection, CSS/shortcode XSS regressions and authenticated settings-save/reload.
+- [x] Deterministic beta3 ZIPs: LAB installation root `ChronoArchive/` and a separate lowercase WordPress.org QA root `chronoarchive/`, each built byte-identically in CI. See [workflow #43760394191](https://github.com/aminostudio/chronoarchive/actions/runs/43760394191).
+- [x] Official Plugin Check runs on the **exact extracted lowercase QA ZIP**. Latest [run #43760394167](https://github.com/aminostudio/chronoarchive/actions/runs/43760394167) reported **zero new findings**, with existing SQL findings still unresolved.
+- [x] LAB admin reported successful installation of `ChronoArchive-2.1.0-beta3-LAB.zip` on 15 November 2026. A 16 November authenticated **read-only** check independently verified active beta3, protected Under Construction state, published QA fixture #70 and draft security fixture #75. See [LAB acceptance notes](LAB-ACCEPTANCE-2026-11-16.md). The site has not had its actual settings saved for this QA: the `WP_ChronoArchive_options` row is absent. This is **not** completed frontend, settings-save or backup acceptance.
+- [x] Recorded the exact published CVE-2023-0178 shortcode payload and checked it on three aliases, contributor role and real Chromium. Reviewed the archived Annual Archive 1.6.0 code for inherited HTML/CSS/widget sinks and added source-derived regression tests. Details in [UPSTREAM-CVE-MAPPING.md](UPSTREAM-CVE-MAPPING.md).
 
-## P1 improvements
+## Remaining P0 gates
 
-- [ ] Replace legacy `extract( $args )` in widget rendering.
-- [ ] Normalize PHP formatting and use the lowercase `chronoarchive` text domain throughout.
-- [ ] Check dropdown behavior and duplicate IDs when multiple widgets and shortcodes are rendered.
-- [ ] Add multisite, custom post type, and block-theme browser tests.
-- [ ] Document minimum PHP/WordPress versions based on actual testing.
-- [ ] Configure GitHub private vulnerability reporting and branch protection.
-- [ ] Maintain a public changelog for each audited patch.
+- [ ] **SQL reviewer decision:** official Plugin Check still reports **2 errors** (`PluginCheck.Security.DirectDB.UnescapedDBParameter`, `WordPress.DB.PreparedSQL.NotPrepared`) and **1 direct-query warning** at the central `$wpdb->get_results( $query )` sink. The default post-type predicate is prepared; the public WordPress `getarchives_where`/`getarchives_join` hooks can supply additional SQL fragments from installed PHP extensions. Do not hide, blindly quote or misrepresent these hooks. See [issue #29](https://github.com/aminostudio/chronoarchive/issues/29) and [SQL-REVIEW-REQUEST.md](SQL-REVIEW-REQUEST.md).
+- [ ] **Security sign-off:** obtain a defensible disposition for two advisories without public source-specific reproductions: `CVE-2023-49847` and `CVE-2024-33598`. Existing reviewed paths and passing CI are not a full independent security audit.
+- [ ] **Protected LAB acceptance:** the connected read-only checks are recorded. Still verify a fresh restorable backup, browser navigation, actual settings persistence and classic widget rendering. Keep Under Construction enabled and security fixture #75 unpublished. No credentials or secrets in public issues.
+- [ ] **Exact stable package:** set header constant/readme/changelog/upgrade notice to `2.1.0` in one reviewed change; remove beta-only user-facing copy, keep source copyright notices, verify clean contents and `chronoarchive/` root, and test against the required WP/PHP matrix.
+- [ ] **Strict release checks:** all CI jobs green on the same SHA, including *non-draft* Plugin Check on the **exact final ZIP** with any findings explicitly resolved or accepted by human review. Draft advisory success is NOT acceptance.
+- [ ] **Maintainer approval and WordPress.org submission:** final audit acceptance and explicit sign-off, then upload a complete plugin ZIP using the developer account at https://wordpress.org/plugins/developers/add/. Review is manual. Only after approval does the WordPress.org SVN release process apply.
 
-## Publishing sequence
+## Packaging rules
 
-1. Baseline import (not a production release).
-2. Security and quality fixes in isolated PRs.
-3. Release candidate package and complete test matrix.
-4. GitHub stable release/tag if approved by maintainers.
-5. WordPress.org new plugin submission, human review, and SVN publishing **only after approval**.
+- The LAB test folder is **case-sensitive** `ChronoArchive/`; the future WordPress.org installable slug is lowercase `chronoarchive/`. Do **not** install both as active plugins on the same site.
+- Beta builds must **fail** `scripts/build-wporg-zip.py --release` and `scripts/check-release-metadata.py --release`.
+- Future genuine stable builds must **pass** both `--release` commands, build reproducibly, pass the under-10-MB limit and have a Git tag exactly matching `v<plugin version>`.
+- The release-ready workflow and exact-ZIP Plugin Check both run on non-draft PRs and version tags. **Never use a green draft check as a permission to publish.**
+- Do not put CI workflows, tests, prebuilt ZIPs, node modules, private QA pages or environment secrets in the WordPress.org distribution.
 
-Always identify whether a check was run or merely planned.
+## P1 after first approval
+
+- Additional locale assets and translated readmes.
+- Extended block-theme/browser matrix and editor UX improvements.
+- Independent performance studies on larger datasets.
+- Optional publishing automation between GitHub and WordPress.org SVN.
+- Aesthetic/admin enhancements and new archive features.
+
+These items are deliberately postponed. The goal is to ship a small, reliable **2.1.0**, not an endlessly expanding pre-release.
