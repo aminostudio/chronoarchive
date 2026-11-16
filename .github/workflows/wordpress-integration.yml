@@ -44,7 +44,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: mysqli, mbstring, zip
+          extensions: mysqli, mbstring, zip, dom
           coverage: none
       - name: Install isolated WordPress and WP-CLI
         shell: bash
@@ -99,6 +99,11 @@ jobs:
           set -euo pipefail
           php /tmp/wp-cli.phar eval-file \
             /tmp/chrono-wp/wp-content/plugins/chronoarchive/tests/wp-integration.php \
+            --path=/tmp/chrono-wp
+      - name: Audit persisted shortcode, legacy widget and CSS XSS paths
+        run: |
+          php /tmp/wp-cli.phar eval-file \
+            /tmp/chrono-wp/wp-content/plugins/chronoarchive/tests/wp-stored-xss-audit.php \
             --path=/tmp/chrono-wp
       - name: Test actual HTTP archive URLs (guest visitor)
         shell: bash
