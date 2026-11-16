@@ -27,6 +27,14 @@
 
 Reference: [WordPress `wp_get_archives()`](https://developer.wordpress.org/reference/functions/wp_get_archives/), [`getarchives_where` hook](https://developer.wordpress.org/reference/hooks/getarchives_where/), [`getarchives_join` hook](https://developer.wordpress.org/reference/hooks/getarchives_join/), [`wpdb::prepare()`](https://developer.wordpress.org/reference/classes/wpdb/prepare/), [Plugin Check #1333](https://github.com/WordPress/plugin-check/issues/1333).
 
+## Current decision boundary (16 November 2026)
+
+The public [WordPress.org Plugin Check support discussion](https://wordpress.org/support/topic/use-placeholders-and-wpdb-prepare-found-query/) says Plugin Check cannot reliably trace a separately prepared SQL variable and recommends an inline `$wpdb->get_results( $wpdb->prepare( ... ) )` call for **static, fully parameterizable** statements. That recommendation alone does not resolve this plugin's actual SQL: the documented WordPress `getarchives_where`/`getarchives_join` hooks return **SQL syntax fragments**, not SQL values, so feeding those fragments into `%s` would alter or break legacy integrations. WordPress/plugin-check [#846](https://github.com/WordPress/plugin-check/issues/846) documents dynamic-query false positives even when a final `prepare( $query, ... )` call is added, and [#1333](https://github.com/WordPress/plugin-check/issues/1333) remains an open false-positive report.
+
+**Reviewer request:** decide whether the existing centralized, source-reviewed sink deserves a narrowly documented exception *after* independent review, or whether an explicitly backward-incompatible redesign removing legacy SQL-filter support is required for WordPress.org. **Do not bypass the scanner by introducing fake placeholders, suppressing sniffs, or hiding calls inside wrappers.** The current two errors and one direct-query warning remain real release gates pending this decision.
+
+**Latest executable security regression:** [WordPress CI #43785264044](https://github.com/aminostudio/chronoarchive/actions/runs/43785264044) passed **430 integration assertions on each of four PHP/WP combinations (1,720 total)**, plus Chromium in both permalink modes on the actual installable lowercase QA ZIP. The shortcode entry points now reject malformed `limit` values on all three aliases before integer coercion, not only in the direct SQL API. Exact-ZIP [Plugin Check #43785264036](https://github.com/aminostudio/chronoarchive/actions/runs/43785264036) still reports **2 existing SQL errors and 1 warning, 0 additional findings**. That advisory CI result does **not** constitute WordPress.org acceptance.
+
 ## Precise question for a WordPress plugin reviewer
 
 ChronoArchive extends the archive modes provided by WordPress core:
