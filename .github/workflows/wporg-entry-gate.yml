@@ -42,3 +42,11 @@ jobs:
           categories: plugin_repo
           # No ignore-codes, ignore-errors or ignore-warnings.
           # The separate all-category workflow must stay visible.
+      - name: Retain blocked candidate for independent security audit
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: chronoarchive-2.1.0-PREFLIGHT-DO-NOT-SUBMIT
+          path: dist/chronoarchive-2.1.0-preflight.zip
+          if-no-files-found: ignore
+          retention-days: 14
