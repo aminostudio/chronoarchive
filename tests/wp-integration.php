@@ -1024,6 +1024,34 @@ $assert( 'Settings screen has no redundant fork or licensing footer',
 $assert( 'Admin textarea closes only once', 1 === substr_count( $admin_html, '</textarea>' ) );
 $assert( 'Admin saved CSS cannot inject script', false === stripos( $admin_html, '<script>' ) );
 $assert( 'Admin settings form includes WordPress nonce', false !== strpos( $admin_html, '_wpnonce' ) );
+
+// A closed/vulnerable predecessor can still coexist with a new installation.
+// It owns the same historical shortcode names, so warn administrators
+// explicitly, without silently deactivating or modifying the old plugin.
+$original_plugin_activation = get_option( 'active_plugins', array() );
+$original_plugin_activation = is_array( $original_plugin_activation ) ? $original_plugin_activation : array();
+ob_start();
+$plugin_under_test->legacy_plugin_conflict_notice();
+$no_legacy_notice = ob_get_clean();
+$assert( 'No predecessor warning when Annual Archive is inactive', '' === $no_legacy_notice );
+
+update_option( 'active_plugins', array_merge( $original_plugin_activation, array( 'anual-archive/annual_archive.php' ) ) );
+ob_start();
+$plugin_under_test->legacy_plugin_conflict_notice();
+$legacy_notice = ob_get_clean();
+$assert( 'Administrator sees old-plugin shortcode collision warning',
+    false !== strpos( $legacy_notice, 'notice-warning' ) &&
+    false !== strpos( $legacy_notice, '[archives]' ) &&
+    false !== strpos( $legacy_notice, '[arcpromat]' ) &&
+    false !== strpos( $legacy_notice, 'deactivate Annual Archive' ) );
+wp_set_current_user( 0 );
+ob_start();
+$plugin_under_test->legacy_plugin_conflict_notice();
+$unauthorized_notice = ob_get_clean();
+$assert( 'Predecessor conflict notice is restricted to plugin managers', '' === $unauthorized_notice );
+wp_set_current_user( 1 );
+update_option( 'active_plugins', $original_plugin_activation );
+
 delete_option( 'WP_ChronoArchive_options' );
 wp_set_current_user( 0 );
 ob_start();
