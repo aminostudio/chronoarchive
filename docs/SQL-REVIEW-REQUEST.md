@@ -1,3 +1,21 @@
+# SQL reviewer decision: native WordPress API migration (2.1.0 preflight)
+
+## Resolution implemented on release branch
+
+**Status: source fix implemented.** The official [Plugin Repo category run #43795360803](https://github.com/aminostudio/chronoarchive/actions/runs/43795360803) passed with all three previous SQL findings eliminated. That scan exposed only a separate overlong Upgrade Notice warning (subsequently shortened, with a 300-character metadata check added). Verify the next full scan on the exact final ZIP before release.
+
+The 2.1.0 stable preflight in [PR #30](https://github.com/aminostudio/chronoarchive/pull/30) **removes the central `$wpdb->get_results( $query )` execution point and all locally assembled aggregate SQL statements**. All seven archive modes use native WordPress `WP_Query`. Five grouped modes retrieve published public posts in bounded batches of 250, calculate chronological buckets and distinct post counts in PHP, preserve ascending/descending order and limits, and cache results against the WordPress posts cache-generation token. Listing modes use native post queries and deduplicate IDs.
+
+### Explicit compatibility and security boundary
+
+Old `getarchives_where` / `getarchives_join` callbacks that **change raw SQL fragments** are now **fail closed**: ChronoArchive returns no archive rather than silently broadening a visitor's view by discarding custom SQL restrictions. An unchanged no-op callback remains compatible. **This is intentionally backward-incompatible for extensions that modify these fragments.** Site developers should use the standard `posts_where`, `posts_join`, or `pre_get_posts` hooks, scoped to `$query->get( 'chronoarchive_origin' )`. This is documented in the WordPress.org readme and upgrade notice. No fake SQL placeholders, lint ignores, or scanner exemptions have been introduced.
+
+Verified [WordPress matrix #43795360846](https://github.com/aminostudio/chronoarchive/actions/runs/43795360846): **384 assertions × 4 = 1,536**, Chromium 2/2 on the exact installable lowercase ZIP, and a successful 3,000-post benchmark on all seven archive modes. The new PHP grouping approach can impose a greater cost than SQL aggregates on very large archives; performance should be monitored after release.
+
+**Historical beta3 analysis retained below for audit context. It is not a description of active 2.1.0 implementation.**
+
+---
+
 # ChronoArchive SQL review request
 
 **Status:** Human review required before any stable release or WordPress.org submission.  

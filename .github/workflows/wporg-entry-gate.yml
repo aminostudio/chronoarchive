@@ -1,0 +1,52 @@
+name: WordPress.org submission entry gate
+
+# Distinguish the WordPress.org automatic pre-submission Plugin Repo checks
+# from the independent ALL-category security/performance advisory scan.
+# These categories answer different questions: do NOT hide the latter.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chrono-wporg-entry-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plugin-repository-entry:
+    name: Official Plugin Check · plugin_repo category · exact stable ZIP
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.head_ref, 'release/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate stable release metadata and archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check-release-metadata.py --release
+          python3 scripts/build-wporg-zip.py --release --output dist/chronoarchive-2.1.0-preflight.zip
+          mkdir -p dist/wporg-entry
+          unzip -q dist/chronoarchive-2.1.0-preflight.zip -d dist/wporg-entry
+          test -f dist/wporg-entry/chronoarchive/chronoarchive.php
+          test -f dist/wporg-entry/chronoarchive/readme.txt
+          unzip -t dist/chronoarchive-2.1.0-preflight.zip
+      - name: Check mandatory WordPress.org Plugin Repo category
+        uses: wordpress/plugin-check-action@v1
+        with:
+          build-dir: './dist/wporg-entry/chronoarchive'
+          slug: chronoarchive
+          categories: plugin_repo
+          # No ignore-codes, ignore-errors or ignore-warnings.
+          # The separate all-category workflow must stay visible.
+      - name: Retain blocked candidate for independent security audit
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: chronoarchive-2.1.0-PREFLIGHT-DO-NOT-SUBMIT
+          path: dist/chronoarchive-2.1.0-preflight.zip
+          if-no-files-found: ignore
+          retention-days: 14

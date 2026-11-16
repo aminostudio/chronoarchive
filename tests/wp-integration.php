@@ -271,30 +271,19 @@ $assert( 'Cached empty archive does not repeat its SQL query',
     $cache_after_second === $cache_after_first );
 unregister_post_type( 'ca_empty_cache' );
 
-// A database error must not poison the archive object cache. A failed
-// get_results() returns null, whereas a valid empty result is an array.
-// The invalid SQL below is generated exclusively by a disposable CI PHP
-// callback, never a visitor input, and errors are suppressed for the test.
+// A changed historical SQL-fragment callback must fail closed before a
+// native query. It cannot be silently ignored, because that could remove a
+// site-specific visibility constraint and broaden the public archive.
 wp_cache_flush();
-$malformed_sql = static function () { return 'WHERE ('; };
-add_filter( 'getarchives_where', $malformed_sql, 10, 1 );
-$previous_suppress = $wpdb->suppress_errors( true );
-$failed_archive_queries_before = $wpdb->num_queries;
-$failed_archive_first = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+$legacy_unsafe_where = static function () { return 'WHERE ('; };
+add_filter( 'getarchives_where', $legacy_unsafe_where, 10, 1 );
+$blocked_queries_before = $wpdb->num_queries;
+$blocked_output = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
     'type' => 'yearly', 'post_type' => 'post', 'echo' => 0,
 ) );
-$failed_archive_queries_after_first = $wpdb->num_queries;
-$failed_archive_second = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
-    'type' => 'yearly', 'post_type' => 'post', 'echo' => 0,
-) );
-$failed_archive_queries_after_second = $wpdb->num_queries;
-$wpdb->suppress_errors( $previous_suppress );
-remove_filter( 'getarchives_where', $malformed_sql, 10 );
-$assert( 'Failed archive SQL does not expose partial archive content',
-    '' === $failed_archive_first && '' === $failed_archive_second );
-$assert( 'Failed archive SQL is retried rather than negatively cached',
-    $failed_archive_queries_after_first > $failed_archive_queries_before &&
-    $failed_archive_queries_after_second > $failed_archive_queries_after_first );
+$assert( 'Changed legacy SQL WHERE fails closed without a native query',
+    '' === $blocked_output && $wpdb->num_queries === $blocked_queries_before );
+remove_filter( 'getarchives_where', $legacy_unsafe_where, 10 );
 
 // Publishing and deleting posts must invalidate an already warmed archive.
 // WordPress clean_post_cache() updates the posts last_changed token.
@@ -336,160 +325,80 @@ if ( $cache_test_created ) {
 }
 
 
-// The legacy SQL filters are *trusted code extension points*, not user input.
-// Non-string fragments must not become SQL, cause PHP warnings, or return
-// private/unfiltered data. Check every mode and both filter hooks independently.
-$invalid_where_values = array( array( 'WHERE post_status=publish' ), null, false, '' );
-$invalid_join_values = array( array( 'JOIN invalid' ), new stdClass(), false );
-foreach ( array( 'getarchives_where' => $invalid_where_values, 'getarchives_join' => $invalid_join_values ) as $hook => $bad_values ) {
-    foreach ( $bad_values as $bad_value ) {
-        $invalid_filter = static function () use ( $bad_value ) {
-            return $bad_value;
-        };
-        add_filter( $hook, $invalid_filter, 10, 1 );
+// Historic getarchives_where and getarchives_join fragments are never
+// passed to MariaDB. Exact no-op callbacks remain compatible, while any
+// altered or malformed fragment fails closed instead of losing restrictions.
+$original_sql_where = '';
+$noop_where = static function ( $where ) use ( &$original_sql_where ) {
+    $original_sql_where = $where;
+    return $where;
+};
+add_filter( 'getarchives_where', $noop_where, 10, 1 );
+$noop_archives = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'echo' => 0, 'limit' => 2,
+) );
+remove_filter( 'getarchives_where', $noop_where, 10 );
+$assert( 'Legacy no-op WHERE callback remains compatible',
+    false !== strpos( $noop_archives, '<li>' ) &&
+    false !== strpos( $original_sql_where, "post_type = 'post'" ) );
+foreach ( array( 'getarchives_where', 'getarchives_join' ) as $legacy_hook ) {
+    foreach ( array( array( 'unsafe' ), false, " WHERE 1=1\0", ' WHERE 1=1' ) as $legacy_value ) {
+        $callback = static function () use ( $legacy_value ) { return $legacy_value; };
+        add_filter( $legacy_hook, $callback, 10, 1 );
         foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade', 'alpha', 'postbypost' ) as $mode ) {
             $before_queries = $wpdb->num_queries;
-            $caught = '';
-            $invalid_output = null;
-            try {
-                $invalid_output = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
-                    'type' => $mode, 'echo' => 0,
-                ) );
-            } catch ( Throwable $exception ) {
-                $caught = $exception->getMessage();
-            }
-            $assert( 'Malformed ' . $hook . ' fails closed (' . $mode . ')',
-                '' === $caught && '' === $invalid_output &&
-                $before_queries === $wpdb->num_queries );
+            $value = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+                'type' => $mode, 'echo' => 0,
+            ) );
+            $assert( 'Changed legacy SQL hook fails closed (' . $legacy_hook . '/' . $mode . ')',
+                '' === $value && $wpdb->num_queries === $before_queries );
         }
-        remove_filter( $hook, $invalid_filter, 10 );
+        remove_filter( $legacy_hook, $callback, 10 );
     }
 }
-// Embedded NUL bytes should not be passed to MariaDB or used as cache keys.
-foreach ( array( 'getarchives_where', 'getarchives_join' ) as $hook ) {
-    $null_byte = static function ( $sql ) { return $sql . "\0"; };
-    add_filter( $hook, $null_byte, 10, 1 );
-    $before_queries = $wpdb->num_queries;
-    $null_output = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
-        'type' => 'yearly', 'echo' => 0,
-    ) );
-    $assert( 'NUL byte in ' . $hook . ' fails closed without executing SQL',
-        '' === $null_output && $before_queries === $wpdb->num_queries );
-    remove_filter( $hook, $null_byte, 10 );
-}
 
-
-// A trusted getarchives_join filter can multiply each post into joined rows.
-// The archive API must count unique posts rather than matching metadata rows.
+// The supported extension contract is now WordPress's native posts_join and
+// posts_where filters. A one-to-many metadata join must not double-count
+// an individual post in grouped archive buckets or listing modes.
 $join_post = wp_insert_post( array(
-    'post_title'  => 'CA CI JOIN Cardinality Fixture',
-    'post_date'   => '2016-08-17 14:20:00',
-    'post_status' => 'publish',
-    'post_type'   => 'post',
+    'post_title' => 'CA CI JOIN Cardinality Fixture',
+    'post_date' => '2016-08-17 14:20:00',
+    'post_status' => 'publish', 'post_type' => 'post',
 ), true );
-$assert( 'JOIN cardinality fixture created', ! is_wp_error( $join_post ) );
+$assert( 'Native JOIN cardinality fixture created', ! is_wp_error( $join_post ) );
 if ( ! is_wp_error( $join_post ) ) {
     $fixture_ids[] = $join_post;
     add_post_meta( $join_post, 'ca_join_cardinality', 'first' );
     add_post_meta( $join_post, 'ca_join_cardinality', 'second' );
-    $join_cardinality = static function ( $join ) use ( $wpdb ) {
+    $native_join = static function ( $join, $query ) use ( $wpdb ) {
+        if ( 'post' !== $query->get( 'post_type' ) ) {
+            return $join;
+        }
         return $join . " INNER JOIN {$wpdb->postmeta} AS ca_join_meta ON ca_join_meta.post_id = {$wpdb->posts}.ID";
     };
-    $where_cardinality = static function ( $where ) {
-        return $where . " AND ca_join_meta.meta_key = 'ca_join_cardinality'";
+    $native_where = static function ( $where, $query ) {
+        return 'post' === $query->get( 'post_type' )
+            ? $where . " AND ca_join_meta.meta_key = 'ca_join_cardinality'" : $where;
     };
-    add_filter( 'getarchives_join', $join_cardinality, 10, 1 );
-    add_filter( 'getarchives_where', $where_cardinality, 10, 1 );
-
-    foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade' ) as $mode ) {
-        $wpdb->last_error = '';
+    add_filter( 'posts_join', $native_join, 10, 2 );
+    add_filter( 'posts_where', $native_where, 10, 2 );
+    foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade', 'alpha', 'postbypost' ) as $mode ) {
+        wp_cache_flush();
         $joined_markup = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
             'type' => $mode, 'show_post_count' => true, 'echo' => 0,
         ) );
-        $assert( 'JOIN ' . $mode . ' does not produce SQL errors', '' === $wpdb->last_error );
-        $assert( 'JOIN ' . $mode . ' counts one post, not two matching metadata rows',
-            is_string( $joined_markup ) &&
+        $assert( 'Native SQL filters retain unique post counts (' . $mode . ')',
+            '' === $wpdb->last_error &&
             1 === substr_count( $joined_markup, '<li>' ) &&
-            1 === substr_count( $joined_markup, '(1)' ) &&
-            false === strpos( $joined_markup, '(2)' ) );
+            ( in_array( $mode, array( 'alpha', 'postbypost' ), true ) ||
+              false !== strpos( $joined_markup, '(1)' ) ) );
     }
-    foreach ( array( 'alpha', 'postbypost' ) as $mode ) {
-        $joined_markup = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
-            'type' => $mode, 'echo' => 0,
-        ) );
-        $assert( 'JOIN ' . $mode . ' lists each post only once',
-            is_string( $joined_markup ) && 1 === substr_count( $joined_markup, '<li>' ) );
-    }
-    remove_filter( 'getarchives_join', $join_cardinality, 10 );
-    remove_filter( 'getarchives_where', $where_cardinality, 10 );
+    remove_filter( 'posts_where', $native_where, 10 );
+    remove_filter( 'posts_join', $native_join, 10 );
 }
 
-
-// wp_get_archives() passes an already-prepared WHERE to these legacy hooks.
-// Verify the final SQL may be rebound without changing the hook-visible SQL,
-// breaking legal percent signs (including the literal sequence "%s"), or
-// losing support for trusted plugins that fully rewrite the WHERE clause.
-$hook_seen = array();
-$legacy_cases = array(
-    'literal-percent' => array(
-        'filter' => static function ( $where ) {
-            return $where . " AND post_title LIKE 'CA-CI%'";
-        },
-        'expect_rows' => true,
-    ),
-    'prepared-percent' => array(
-        'filter' => static function ( $where ) use ( $wpdb ) {
-            return $where . $wpdb->prepare( ' AND post_title LIKE %s', 'CA-CI%' );
-        },
-        'expect_rows' => true,
-    ),
-    'reordered-where' => array(
-        'filter' => static function ( $where ) {
-            // Deliberately remove the canonical clause byte sequence.
-            // This trusted full rewrite must remain backwards compatible.
-            return "WHERE post_status = 'publish' AND post_type = 'post' AND post_title LIKE 'CA-CI%'";
-        },
-        'expect_rows' => true,
-    ),
-    'literal-placeholder-like' => array(
-        'filter' => static function ( $where ) {
-            // "%s" here is SQL LIKE text, not a wpdb::prepare() argument.
-            return $where . " AND post_title LIKE 'CA-CI%suffix'";
-        },
-        'expect_rows' => false,
-    ),
-);
-foreach ( $legacy_cases as $case => $spec ) {
-    $wrapped_filter = static function ( $where, $args ) use ( &$hook_seen, $spec ) {
-        $hook_seen[] = $where;
-        return call_user_func( $spec['filter'], $where );
-    };
-    $hook_seen = array();
-    add_filter( 'getarchives_where', $wrapped_filter, 10, 2 );
-    foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade', 'alpha', 'postbypost' ) as $mode ) {
-        wp_cache_flush();
-        $wpdb->last_error = '';
-        $html = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
-            'type' => $mode, 'echo' => 0, 'limit' => 3,
-        ) );
-        $valid_result = is_string( $html ) && '' === $wpdb->last_error &&
-            ( $spec['expect_rows'] ? false !== strpos( $html, '<li>' ) : '' === $html );
-        $assert( 'Final archive SQL preserves ' . $case . ' filter (' . $mode . ')', $valid_result );
-    }
-    $assert( 'WordPress legacy WHERE filter sees prepared source clause (' . $case . ')',
-        isset( $hook_seen[0] ) && false !== strpos(
-            $hook_seen[0], "WHERE post_type = 'post' AND post_status = 'publish'"
-        ) );
-    remove_filter( 'getarchives_where', $wrapped_filter, 10 );
-}
-unset( $legacy_cases, $hook_seen );
-
-
-// Native WP_Query listings must match the specialized SQL fallback in the
-// absence of custom SQL fragments. The no-op archive hook forces fallback
-// without changing its SQL, so output parity is checked for both sort
-// directions and bounded/unbounded lists.
-$noop_where = static function ( $where ) { return $where; };
+// All individual listing modes are native WP_Query, even when a no-op
+// historical archive SQL callback has been registered.
 $native_observed = 0;
 $native_spy = static function ( $query ) use ( &$native_observed ) {
     if ( 'post' === $query->get( 'post_type' ) && ! $query->is_main_query() ) {
@@ -500,28 +409,27 @@ add_action( 'pre_get_posts', $native_spy, 100, 1 );
 foreach ( array( 'alpha', 'postbypost' ) as $listing_mode ) {
     foreach ( array( 'ASC', 'DESC' ) as $direction ) {
         foreach ( array( 7, 0 ) as $listing_limit ) {
-            $listing_args = array(
-                'type' => $listing_mode, 'echo' => 0,
-                'limit' => $listing_limit, 'alpha_order' => $direction,
-                'post_order' => $direction, 'post_type' => 'post',
+            $args = array(
+                'type' => $listing_mode, 'echo' => 0, 'limit' => $listing_limit,
+                'alpha_order' => $direction, 'post_order' => $direction,
             );
             wp_cache_flush();
             $native_before = $native_observed;
-            $native_result = WP_Plugin_ChronoArchive::wp_get_archives_advanced( $listing_args );
-            $assert( 'Native listing uses WP_Query (' . $listing_mode . '/' . $direction . '/' . $listing_limit . ')',
-                $native_observed > $native_before );
+            $baseline = WP_Plugin_ChronoArchive::wp_get_archives_advanced( $args );
+            $assert( 'All listing paths use WP_Query (' . $listing_mode . '/' . $direction . '/' . $listing_limit . ')',
+                $native_observed > $native_before && false !== strpos( $baseline, '<li>' ) );
             add_filter( 'getarchives_where', $noop_where, 10, 1 );
-            $legacy_result = WP_Plugin_ChronoArchive::wp_get_archives_advanced( $listing_args );
+            $with_noop = WP_Plugin_ChronoArchive::wp_get_archives_advanced( $args );
             remove_filter( 'getarchives_where', $noop_where, 10 );
-            $assert( 'Native listing matches trusted SQL fallback (' . $listing_mode . '/' . $direction . '/' . $listing_limit . ')',
-                is_string( $native_result ) && $native_result === $legacy_result );
+            $assert( 'Legacy no-op filters do not affect native listing output',
+                $baseline === $with_noop );
         }
     }
 }
 remove_action( 'pre_get_posts', $native_spy, 100 );
 
-// Standard WP_Query SQL filters must remain active on the native listing
-// path. WordPress VIP flags suppress_filters=true as a compatibility defect.
+// Keep standard WP_Query SQL filters active: suppress_filters=true would
+// silently break third-party WordPress post-level restrictions.
 $posts_where_called = 0;
 $native_where_spy = static function ( $where, $query ) use ( &$posts_where_called ) {
     if ( 'post' === $query->get( 'post_type' ) ) {
@@ -531,19 +439,20 @@ $native_where_spy = static function ( $where, $query ) use ( &$posts_where_calle
 };
 add_filter( 'posts_where', $native_where_spy, 10, 2 );
 WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'yearly', 'post_type' => 'post', 'echo' => 0, 'limit' => 5,
+) );
+WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
     'type' => 'alpha', 'post_type' => 'post', 'echo' => 0, 'limit' => 5,
 ) );
 remove_filter( 'posts_where', $native_where_spy, 10 );
-$assert( 'Native WP_Query listing preserves core posts_where filters',
-    $posts_where_called > 0 );
-
+$assert( 'Native grouped and listing WP_Query retain posts_where filters',
+    $posts_where_called >= 2 );
 
 foreach ( array( 'alpha', 'postbypost' ) as $listing_mode ) {
-    $wpdb->last_error = '';
     $invalid_numeric = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
         'type' => $listing_mode, 'limit' => 'not-a-number', 'echo' => 0,
     ) );
-    $assert( 'Malformed nonnumeric listing limit fails closed (' . $listing_mode . ')',
+    $assert( 'Malformed nonnumeric native listing limit fails closed (' . $listing_mode . ')',
         '' === $invalid_numeric && '' === $wpdb->last_error );
 }
 
@@ -581,89 +490,71 @@ foreach ( array( 'alpha', 'postbypost' ) as $listing_mode ) {
 unregister_post_type( 'ca_native_list' );
 
 
-// Audit the final SQL at the wpdb::query boundary, not just rendered HTML.
-// Canonical post_type values are bound via wpdb::prepare() before the legacy
-// WordPress SQL hooks run, as in core wp_get_archives(). Only this disposable
-// WordPress test instance is modified; SQL is inspected, never changed.
-$sql_audit_seen = array();
-$sql_audit_filter = static function ( $statement ) use ( &$sql_audit_seen, $wpdb ) {
+// Real SQL audit: all seven modes use WordPress-constructed queries, not
+// archive-specific direct aggregate SQL. Invalid values reach no query sink.
+$native_sql_seen = array();
+$native_sql_audit = static function ( $statement ) use ( &$native_sql_seen, $wpdb ) {
     if ( 0 === stripos( ltrim( $statement ), 'SELECT ' ) &&
         false !== strpos( $statement, $wpdb->posts ) &&
-        false !== strpos( $statement, 'COUNT(DISTINCT' ) ) {
-        $sql_audit_seen[] = $statement;
+        false !== strpos( $statement, 'post_status' ) ) {
+        $native_sql_seen[] = $statement;
     }
     return $statement;
 };
-add_filter( 'query', $sql_audit_filter, 10, 1 );
-foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade' ) as $sql_mode ) {
+add_filter( 'query', $native_sql_audit, 10, 1 );
+foreach ( array( 'yearly', 'monthly', 'daily', 'weekly', 'decade', 'alpha', 'postbypost' ) as $native_mode ) {
     wp_cache_flush();
-    $sql_audit_seen = array();
+    $native_sql_seen = array();
     $wpdb->last_error = '';
-    $sql_output = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
-        'type' => $sql_mode, 'post_type' => 'post', 'echo' => 0, 'limit' => 3,
+    $native_output = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+        'type' => $native_mode, 'post_type' => 'post', 'echo' => 0, 'limit' => 3,
     ) );
-    $assert( 'Core-style prepared post type executes archive SQL (' . $sql_mode . ')',
-        is_string( $sql_output ) && '' !== $sql_output &&
-        '' === $wpdb->last_error && 1 === count( $sql_audit_seen ) );
-    $assert( 'Archive SQL has validated published-only predicate (' . $sql_mode . ')',
-        1 === count( $sql_audit_seen ) &&
-        false !== strpos( $sql_audit_seen[0], "WHERE post_type = 'post' AND post_status = 'publish'" ) &&
-        false === strpos( $sql_audit_seen[0], 'CHRONOARCHIVE_BOUND_POST_TYPE' ) );
+    $assert( 'Native WP_Query emits valid public archive (' . $native_mode . ')',
+        is_string( $native_output ) && false !== strpos( $native_output, '<li>' ) &&
+        '' === $wpdb->last_error && count( $native_sql_seen ) >= 1 );
+    $assert( 'Native SQL uses published-only post-type restrictions (' . $native_mode . ')',
+        count( $native_sql_seen ) >= 1 &&
+        false !== strpos( $native_sql_seen[0], "'post'" ) &&
+        false !== strpos( $native_sql_seen[0], "'publish'" ) &&
+        false === strpos( $native_sql_seen[0], 'COUNT(DISTINCT' ) );
 }
-// A hostile shortcode/direct API post_type must not become a SQL predicate.
 foreach ( array( "post' OR 1=1 --", array( 'post' ) ) as $unsafe_type ) {
-    $sql_audit_seen = array();
+    $native_sql_seen = array();
     $unsafe_result = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
         'type' => 'yearly', 'post_type' => $unsafe_type, 'echo' => 0,
     ) );
-    $assert( 'Unregistered or malformed post type never reaches MariaDB',
-        '' === $unsafe_result && 0 === count( $sql_audit_seen ) );
+    $assert( 'Invalid post type cannot reach native WP_Query',
+        '' === $unsafe_result && 0 === count( $native_sql_seen ) );
 }
-// absint() historically accepted the numeric prefix of SQL-like strings,
-// e.g. '1 UNION SELECT' became 1. Such values must now fail closed with
-// LIMIT 0, not be mistaken for intentional archive selection. Check all
-// seven modes, including the legacy SQL fallback for post listings.
 foreach ( array( '1 UNION SELECT private_post_title', '2e2', '-3', '3foo', '3.2', '0 OR 1=1' ) as $bad_limit ) {
     foreach ( array( 'yearly', 'monthly', 'weekly', 'daily', 'decade', 'alpha', 'postbypost' ) as $limit_mode ) {
         wp_cache_flush();
-        $sql_audit_seen = array();
+        $native_sql_seen = array();
         $wpdb->last_error = '';
         $bad_result = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
-            'type' => $limit_mode,
-            'limit' => $bad_limit,
-            'order' => 'DESC; DELETE FROM wp_posts',
-            'echo' => 0,
+            'type' => $limit_mode, 'limit' => $bad_limit,
+            'order' => 'DESC; DELETE FROM wp_posts', 'echo' => 0,
         ) );
-        $assert( 'Invalid decimal limit fails closed (' . $limit_mode . '/' . $bad_limit . ')',
-            '' === $bad_result && '' === $wpdb->last_error );
-        if ( ! in_array( $limit_mode, array( 'alpha', 'postbypost' ), true ) ) {
-            $assert( 'Invalid limit never enters SQL (' . $limit_mode . '/' . $bad_limit . ')',
-                1 === count( $sql_audit_seen ) &&
-                false !== strpos( $sql_audit_seen[0], ' LIMIT 0' ) &&
-                false !== strpos( $sql_audit_seen[0], ' DESC ' ) &&
-                false === strpos( $sql_audit_seen[0], 'UNION SELECT' ) &&
-                false === strpos( $sql_audit_seen[0], 'DELETE FROM' ) );
-        }
+        $assert( 'Invalid numeric limit fails closed before any query (' . $limit_mode . '/' . $bad_limit . ')',
+            '' === $bad_result && '' === $wpdb->last_error && 0 === count( $native_sql_seen ) );
     }
 }
 foreach ( array( '0', '000', '' ) as $zero_limit ) {
     wp_cache_flush();
-    $sql_audit_seen = array();
+    $native_sql_seen = array();
     $zero_html = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
         'type' => 'yearly', 'limit' => $zero_limit, 'echo' => 0,
     ) );
-    $assert( 'Zero/omitted limit remains unlimited (' . $zero_limit . ')',
+    $assert( 'Native grouped zero/omitted limit remains unlimited (' . $zero_limit . ')',
         is_string( $zero_html ) && substr_count( $zero_html, '<li>' ) > 3 &&
-        1 === count( $sql_audit_seen ) &&
-        false === strpos( $sql_audit_seen[0], ' LIMIT ' ) );
+        count( $native_sql_seen ) >= 1 );
 }
-wp_cache_flush();
 $two_html = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
     'type' => 'yearly', 'limit' => ' 2 ', 'echo' => 0,
 ) );
-$assert( 'Whitespace around a valid decimal limit is permitted',
+$assert( 'Native grouped decimal limit still caps buckets',
     2 === substr_count( $two_html, '<li>' ) );
-remove_filter( 'query', $sql_audit_filter, 10 );
+remove_filter( 'query', $native_sql_audit, 10 );
 
 $assert( 'Unknown post type returns empty entries', false === strpos(
     do_shortcode( '[chronoarchive type="yearly" post_type="missing_ca_type"]' ), '<a ' ) );

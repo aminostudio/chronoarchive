@@ -158,6 +158,10 @@ def main() -> int:
             current_notice = upgrade[1].split(f"= {version} =", 1)[1].split(
                 "\n= ", 1
             )[0]
+            if len(current_notice.strip()) > 300:
+                errors.append(
+                    "RELEASE GATE: current WordPress.org upgrade notice exceeds 300 characters"
+                )
             if re.search(
                 r"\b(beta|development|not.*production|review.*pending)\b",
                 current_notice,

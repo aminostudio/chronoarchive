@@ -81,7 +81,8 @@ jobs:
             php /tmp/wp-cli.phar plugin install /tmp/chronoarchive-ci-wporg-qa.zip --activate --path=/tmp/chrono-wp
             test -f /tmp/chrono-wp/wp-content/plugins/chronoarchive/chronoarchive.php
             test ! -d /tmp/chrono-wp/wp-content/plugins/ChronoArchive
-            test "$(php /tmp/wp-cli.phar plugin get chronoarchive --field=version --path=/tmp/chrono-wp)" = "2.1.0-beta3"
+            expected_version=$(sed -n 's/^Version:[[:space:]]*//p' chronoarchive.php | head -1)
+            test "$(php /tmp/wp-cli.phar plugin get chronoarchive --field=version --path=/tmp/chrono-wp)" = "$expected_version"
             # CI tests are copied after installation; no tests are shipped in
             # the installable ZIP itself.
             cp -R tests /tmp/chrono-wp/wp-content/plugins/chronoarchive/

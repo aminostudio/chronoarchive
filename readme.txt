@@ -3,7 +3,7 @@ Contributors: aminostudio
 Tags: archives, shortcode, widget, date archives, custom post types
 Requires at least: 6.5
 Tested up to: 7.1
-Stable tag: 2.1.0-beta3
+Stable tag: 2.1.0
 Requires PHP: 7.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -11,8 +11,6 @@ License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Browse WordPress posts by year, month, week, day or decade using shortcodes or a classic widget.
 
 == Description ==
-
-**Development beta: not yet recommended for production sites.**
 
 ChronoArchive creates chronological archive lists for WordPress posts and supported public custom post types. Developed and maintained by Amino Studio.
 
@@ -40,28 +38,25 @@ Examples:
 
 `[chronoarchive type="monthly" format="option" select_text="Choose a month"]`
 
-**Security and release status:** Development security hardening and compatibility tests are ongoing. Final SQL and inherited-vulnerability reviews remain open. This beta has not been approved by WordPress.org and should be tested on an isolated WordPress site only.
+**Security:** ChronoArchive validates shortcode attributes, restricts custom CSS settings, escapes output and limits archive SQL to registered public post types. To report a possible security vulnerability, use the private maintainer contact below. Review your theme and existing archive URLs when upgrading.
 
 Source code, release blockers and bug reports: https://github.com/aminostudio/chronoarchive
 
 == Installation ==
 
-ChronoArchive 2.1.0-beta3 is for **testing and review only**. Do not use it on an important live website.
+ChronoArchive can be installed like any other WordPress plugin. Back up your site before upgrading or replacing a previous archive plugin.
 
-1. Use an isolated WordPress test installation meeting the requirements above.
-2. Install a development ZIP with a top-level `chronoarchive` directory, or copy its source files into `wp-content/plugins/chronoarchive/`.
-3. Activate ChronoArchive in the WordPress Plugins screen.
-4. Add a Shortcode block such as `[chronoarchive type="yearly"]` to a test page, or use the classic widget.
-5. Check archive links, permalinks, counts, keyboard navigation and theme layout.
-6. Review the release and security notes before upgrading an existing archive installation.
-
-The public `main` branch currently contains the project landing page, **not a downloadable stable plugin**. Development snapshots should not be mistaken for releases.
+1. Install the ChronoArchive plugin ZIP using **Plugins → Add New → Upload Plugin**.
+2. Activate ChronoArchive.
+3. Add a Shortcode block such as `[chronoarchive type="yearly"]`, or use the classic widget.
+4. Open **Settings → ChronoArchive** to configure defaults and build a shortcode.
+5. Verify archive links and permalinks on your theme before replacing a previous archive plugin.
 
 == Frequently Asked Questions ==
 
-= Is this plugin ready for production? =
+= Does ChronoArchive work with recent WordPress versions? =
 
-No. Version 2.1.0-beta3 is a development build. Public stable release and WordPress.org review are pending, including the final security and SQL checks.
+The plugin is tested against WordPress 6.5.5 and the most recent WordPress version in its automated matrix. Check the requirements above and keep your installation backed up.
 
 = Does ChronoArchive support old shortcodes? =
 
@@ -70,6 +65,12 @@ Yes. `[archives]` and `[arcpromat]` are retained. Prefer `[chronoarchive]` for n
 = Should Annual Archive stay active after migrating? =
 
 No. Both extensions register the `[archives]` and `[arcpromat]` shortcodes, so running them together can produce unpredictable results. Back up your site, check the archived pages and widgets, then deactivate Annual Archive. ChronoArchive displays an administrator-only warning when it detects that both are active. It never disables another plugin automatically.
+
+= Do legacy getarchives_where and getarchives_join PHP filters still change ChronoArchive queries? =
+
+No. ChronoArchive 2.1.0 no longer executes custom SQL fragments from these historic filters. For safety, a callback that changes either SQL fragment causes ChronoArchive to display no results rather than silently discard a potentially important content restriction. No-op callbacks remain compatible.
+
+For customization, migrate to WordPress's supported `posts_where`, `posts_join` or `pre_get_posts` hooks using safe parameterization. Target only ChronoArchive queries by checking `$query->get( 'chronoarchive_origin' )` in your callback. ChronoArchive uses paginated `WP_Query` and groups public, published posts in PHP. On a site with many posts, check performance and object caching before deploying.
 
 = What archive types can I request? =
 
@@ -88,6 +89,15 @@ Please report vulnerabilities privately through the maintainer's contact informa
 Amino Studio develops and maintains ChronoArchive. The project repository contains its source code, technical documentation and release history.
 
 == Changelog ==
+
+= 2.1.0 =
+
+* First stable-version release candidate with archive lists by year, month, week, day, decade and post title.
+* Shortcode `[chronoarchive]`, compatibility aliases `[archives]` and `[arcpromat]`, and classic widget.
+* Configurable defaults, administration dashboard, shortcode builder, CSS controls and public custom post types.
+* Input validation, late escaping, archive link navigation and compatibility improvements.
+* Moved grouped archives to native paginated WP_Query, replacing raw SQL aggregation. Custom legacy SQL-fragment filters now fail closed if they modify query fragments; migrate to scoped WordPress post query hooks.
+* Verified reproducible WordPress.org ZIP packaging and real WordPress/PHP/browser test coverage.
 
 = 2.1.0-beta3 =
 
@@ -123,6 +133,10 @@ Amino Studio develops and maintains ChronoArchive. The project repository contai
 * This development version was not a public security-certified release.
 
 == Upgrade Notice ==
+
+= 2.1.0 =
+
+Back up your site and verify archives, custom post types and widgets. Legacy getarchives_where/getarchives_join SQL filters must migrate to scoped posts_where/posts_join or pre_get_posts filters; altered SQL fragments now fail closed. Deactivate Annual Archive to avoid shortcode collisions.
 
 = 2.1.0-beta3 =
 
