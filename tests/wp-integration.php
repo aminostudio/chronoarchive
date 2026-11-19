@@ -643,6 +643,28 @@ foreach ( array( '2019-12-31', '2024-02-31', 'not-a-date' ) as $bad_week ) {
 }
 $GLOBALS['wp_the_query'] = $main_backup;
 
+// WordPress normally stores 0–6 for start_of_week. A corrupted/legacy
+// value must use the same Monday fallback in both link generation and
+// incoming weekly URL validation; otherwise valid links yield zero posts.
+update_option( 'start_of_week', 7 );
+$invalid_start_week = WP_Plugin_ChronoArchive::wp_get_archives_advanced( array(
+    'type' => 'weekly', 'echo' => 0,
+) );
+$assert( 'Invalid start_of_week uses Monday for generated weekly links',
+    false !== strpos( $invalid_start_week, 'chrono_week=2019-12-30' ) );
+$fallback_week_query = new WP_Query();
+$GLOBALS['wp_the_query'] = $fallback_week_query;
+$fallback_week_query->parse_query( array( 'year' => 2019, 'chrono_week' => '2019-12-30' ) );
+$plugin_under_test->ChronoArchive_decade_filter( $fallback_week_query );
+$fallback_dates = $fallback_week_query->get( 'date_query' );
+$assert( 'Invalid start_of_week preserves valid Monday weekly URLs',
+    is_array( $fallback_dates ) &&
+    '2019-12-30' === ( $fallback_dates[0]['after'] ?? '' ) &&
+    '2020-01-05' === ( $fallback_dates[0]['before'] ?? '' ) &&
+    array( 0 ) !== $fallback_week_query->get( 'post__in' ) );
+$GLOBALS['wp_the_query'] = $main_backup;
+update_option( 'start_of_week', 1 );
+
 $homepage_query = new WP_Query();
 $GLOBALS['wp_the_query'] = $homepage_query;
 $homepage_query->parse_query( array( 'chrono_week' => '2024-01-01' ) );
