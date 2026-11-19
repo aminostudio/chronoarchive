@@ -138,8 +138,12 @@ class WP_Plugin_ChronoArchive {
 			$week = is_string( $week ) ? $week : '';
 			$start = preg_match( '/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/', $week )
 				? DateTimeImmutable::createFromFormat( '!Y-m-d', $week, wp_timezone() ) : false;
+			// Match grouped_archive_rows(): invalid legacy option values fall back
+			// to Monday, instead of rejecting every otherwise valid week URL.
+			$start_day = (int) get_option( 'start_of_week', 1 );
+			$start_day = $start_day >= 0 && $start_day <= 6 ? $start_day : 1;
 			if ( ! $start || $start->format( 'Y-m-d' ) !== $week ||
-				(int) $start->format( 'w' ) !== (int) get_option( 'start_of_week', 1 ) ) {
+				(int) $start->format( 'w' ) !== $start_day ) {
 				// Invalid archive dates must not silently expose the complete post list.
 				$query->set( 'post__in', array( 0 ) );
 				return;
